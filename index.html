@@ -188,6 +188,16 @@ td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-
       <label for="topic"><span id="topicLabel">논제</span> <input id="topic" type="text" placeholder="선택 · 예: 기초학력 보장 충남온학력"></label>
       <button id="copyBtn" type="button">기록 복사</button>
     </div>
+    <form id="recordForm" class="copybox">
+      <label>이름 <input id="recordName" maxlength="60" autocomplete="name" required></label>
+      <label>작성일 <input id="recordDate" type="date" required></label>
+      <label>개인 접근키 <input id="recordsKey" type="password" autocomplete="off" required></label>
+      <button id="saveRecord" type="submit">기록 저장</button>
+      <button id="retryRecord" type="button" hidden>미전송 기록 다시 저장</button>
+      <button id="loadRecords" type="button">내 기록 불러오기</button>
+    </form>
+    <p id="recordStatus" class="hint" role="status"></p>
+    <ul id="savedRecords"></ul>
     <textarea id="copyText" readonly rows="11" aria-label="복사할 기록"></textarea>
     <p class="hint" id="recordHint"></p>
   </details>
@@ -376,6 +386,7 @@ $("lapBtn").onclick=()=>{
   renderLog();tick();
 };
 function doReset(){
+  recordId=null;
   running=false;banked=0;laps=[];lapFrom=0;lastStage=-1;lastTs=-1;done=false;warned={};releaseWake();
   $("startBtn").textContent="시작";$("startBtn").disabled=false;$("lapBtn").disabled=true;$("total").disabled=false;$("preset").disabled=false;
 }
@@ -551,6 +562,125 @@ function searchPolicy(){
     return t.kind==="세부과제"?taskItem(t,mark,tag):`<li><span class="code">${mark(t.id)}</span>${mark(t.title)}${tag}</li>`}).join("");
   $("pnResult").textContent=items.length?`${items.length}건 찾음`:"찾은 과제가 없습니다 · 「전체 보기」로 목록에 돌아갈 수 있습니다.";
 }
+const recordForm = $("recordForm");
+const recordStatus = $("recordStatus");
+const draftKey = "timerPendingRecordV1";
+let recordId = null;
+let savedRecordId = null;
+let pendingRecord = null;
+try { pendingRecord = JSON.parse(load(draftKey) || "null"); } catch {}
+$("recordDate").value = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
+$("retryRecord").hidden = !pendingRecord;
+if (pendingRecord) recordStatus.textContent = "미전송 기록이 있습니다. 접근키를 입력하고 다시 저장해 주세요.";
+
+async function recordRequest(action, record) {
+  const key = $("recordsKey").value.trim();
+  if (!key) throw new Error("개인 접근키를 입력해 주세요.");
+  const response = await fetch("/api/records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+    body: JSON.stringify({ action, record })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    const error = new Error(result.error || "저장 서버에 연결할 수 없습니다.");
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+async function submitRecord(record) {
+  $("saveRecord").disabled = $("retryRecord").disabled = true;
+  pendingRecord = record;
+  store(draftKey, JSON.stringify(record));
+  $("retryRecord").hidden = false;
+  recordStatus.textContent = "저장 중…";
+  try {
+    await recordRequest("save", record);
+    savedRecordId = record.id;
+    pendingRecord = null;
+    store(draftKey, "null");
+    $("retryRecord").hidden = true;
+    recordStatus.textContent = "스프레드시트에 저장했습니다.";
+  } catch (error) {
+    if (error.status === 400) {
+      pendingRecord = null;
+      store(draftKey, "null");
+      $("retryRecord").hidden = true;
+      recordStatus.textContent = error.message;
+    } else {
+      recordStatus.textContent = error.message + " 미전송 기록을 다시 저장할 수 있습니다.";
+    }
+  } finally {
+    $("saveRecord").disabled = $("retryRecord").disabled = false;
+  }
+}
+
+recordForm.addEventListener("submit", event => {
+  event.preventDefault();
+  if (pendingRecord) {
+    recordStatus.textContent = "미전송 기록부터 다시 저장해 주세요.";
+    return;
+  }
+  if (recordId && recordId === savedRecordId) {
+    recordStatus.textContent = "이 연습은 이미 저장했습니다. 다음 연습은 초기화한 뒤 시작해 주세요.";
+    return;
+  }
+  const seconds = Math.round(elapsed());
+  if (running || seconds <= 0) {
+    recordStatus.textContent = "연습을 진행한 뒤 완료하거나 일시정지하고 저장해 주세요.";
+    return;
+  }
+  const name = $("recordName").value.trim();
+  const topic = $("topic").value.trim();
+  const date = $("recordDate").value;
+  if (!name || !topic || !date) {
+    recordStatus.textContent = "이름, 주제, 작성일을 입력해 주세요.";
+    return;
+  }
+  recordId ||= crypto.randomUUID();
+  submitRecord({
+    id: recordId, name, topic, date, mode, total, elapsed: seconds,
+    stages: plan.map((stage, i) => ({
+      name: stage.name, planned: stage.len, actual: laps[i] === undefined ? null : Math.round(laps[i])
+    }))
+  });
+});
+$("retryRecord").onclick = () => {
+  if (pendingRecord) submitRecord(pendingRecord);
+};
+$("loadRecords").onclick = async () => {
+  const list = $("savedRecords");
+  list.replaceChildren();
+  $("loadRecords").disabled = true;
+  try {
+    const { records } = await recordRequest("list");
+    for (const r of records) {
+      const entry = document.createElement("li");
+      const detail = document.createElement("details");
+      const label = document.createElement("summary");
+      label.textContent = [r.date, r.name, r.topic, r.mode === "practice" ? "실무" : "논술", fmt(r.elapsed)].join(" · ");
+      detail.append(label);
+      const stages = document.createElement("ul");
+      for (const stage of r.stages) {
+        const row = document.createElement("li");
+        row.textContent = stage.name + " · 계획 " + fmt(stage.planned) +
+          " · 실제 " + (stage.actual === null ? "미기록" : fmt(stage.actual));
+        stages.append(row);
+      }
+      detail.append(stages);
+      entry.append(detail);
+      list.append(entry);
+    }
+    recordStatus.textContent = records.length ? "최근 기록 " + records.length + "건을 불러왔습니다." : "저장된 기록이 없습니다.";
+  } catch (error) {
+    recordStatus.textContent = error.message;
+  } finally {
+    $("loadRecords").disabled = false;
+  }
+};
+
 renderPolicy();
 applyTheme();setMode(load("timerMode")||"essay",false);setInterval(tick,250);
 </script>
