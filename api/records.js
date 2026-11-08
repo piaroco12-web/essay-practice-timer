@@ -92,8 +92,8 @@ module.exports = async function records(req, res) {
       return res.status(200).json({ ok: true, user });
     }
 
-    const result = await callScript({ action, user: sessionUser, record: payload.record });
-    if (result.code === "INVALID_RECORD") return fail(400, "이름·주제·작성일과 기록 값을 확인해 주세요.");
+    const result = await callScript({ action, user: sessionUser, record: action === "save" ? { ...payload.record, name: sessionUser } : payload.record });
+    if (result.code === "INVALID_RECORD") return fail(400, "주제·작성일과 기록 값을 확인해 주세요.");
     if (result.ok && action === "save" && result.id === payload.record?.id) {
       return res.status(200).json({ ok: true, id: result.id });
     }

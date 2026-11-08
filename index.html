@@ -105,6 +105,7 @@ td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-
 .pn-plan h4{margin:4px 0 8px;font-size:1rem}
 .pn-plan article p,.pn-plan article li{margin:0 0 8px;line-height:1.65}
 .pn-plan article ol,.pn-plan article ul{padding-left:1.5em;margin:8px 0}
+.header-tools{flex-wrap:wrap;gap:10px}#accountPanel{padding:0 0 18px;border-bottom:1px solid var(--rule)}#accountToggle{max-width:240px;overflow-wrap:anywhere}#recordBrowser select{max-width:100%;min-width:0;flex:1;background:var(--paper);color:var(--ink);border:1px solid var(--rule)}#savedRecords{padding-left:20px;overflow-wrap:anywhere}
 </style>
 </head>
 <body class="ready">
@@ -116,8 +117,21 @@ td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-
 <div class="wrap">
   <header>
     <h1 id="title">논술 페이스 타이머</h1>
-    <div class="header-tools"><div class="mode-toggle" role="group" aria-label="모드"><button type="button" data-mode="essay">논술</button><button type="button" data-mode="practice">실무</button></div><span class="sub" id="sub">교육정책 논술 연습</span><span class="status" id="status">준비</span><button class="theme" id="themeBtn">테마: 자동</button></div>
+    <div class="header-tools"><div class="mode-toggle" role="group" aria-label="모드"><button type="button" data-mode="essay">논술</button><button type="button" data-mode="practice">실무</button></div><span class="sub" id="sub">교육정책 논술 연습</span><span class="status" id="status">준비</span><button class="theme" id="accountToggle" type="button" aria-expanded="false" aria-controls="accountPanel">로그인 / 회원가입</button><button class="theme" id="themeBtn">테마: 자동</button></div>
   </header>
+  <section id="accountPanel" hidden aria-label="내 계정">
+    <form id="accountForm" class="copybox">
+      <label>아이디 <input id="accountUser" autocomplete="username" maxlength="32" required></label>
+      <label>비밀번호 <input id="accountPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+      <button type="submit">로그인</button>
+      <button type="button" id="signupRecord">회원가입</button>
+    </form>
+    <div class="copybox" id="accountSession" hidden>
+      <span id="accountName"></span>
+      <button type="button" id="logoutRecord">로그아웃</button>
+    </div>
+    <p id="accountStatus" class="hint" role="status"></p>
+  </section>
 
   <section class="mode-pick" aria-label="연습 모드 선택">
     <button type="button" class="mode-card" data-mode="essay"><svg aria-hidden="true"><use href="#essay-icon"/></svg><b>논술</b><span>1교시 교육정책 논술 · A4 2매 50분</span></button>
@@ -188,25 +202,22 @@ td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-
       <label for="topic"><span id="topicLabel">논제</span> <input id="topic" type="text" placeholder="선택 · 예: 기초학력 보장 충남온학력"></label>
       <button id="copyBtn" type="button">기록 복사</button>
     </div>
-    <form id="accountForm" class="copybox">
-      <label>아이디 <input id="accountUser" autocomplete="username" maxlength="32" required></label>
-      <label>비밀번호 <input id="accountPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
-      <button type="submit">로그인</button>
-      <button type="button" id="signupRecord">회원가입</button>
-    </form>
-    <div class="copybox" id="accountSession" hidden>
-      <span id="accountName"></span>
-      <button type="button" id="logoutRecord">로그아웃</button>
-    </div>
     <form id="recordForm" class="copybox">
-      <label>이름 <input id="recordName" maxlength="60" autocomplete="name" required></label>
       <label>작성일 <input id="recordDate" type="date" required></label>
       <button id="saveRecord" type="submit">기록 저장</button>
       <button id="retryRecord" type="button" hidden>미전송 기록 다시 저장</button>
       <button id="loadRecords" type="button">내 기록 불러오기</button>
     </form>
     <p id="recordStatus" class="hint" role="status"></p>
-    <ul id="savedRecords"></ul>
+    <section id="recordBrowser" hidden aria-label="저장된 기록 선택">
+      <div class="copybox">
+        <label>날짜 <select id="filterDate"><option value="">전체 날짜</option></select></label>
+        <label>주제 <select id="filterTopic"><option value="">전체 주제</option></select></label>
+        <button id="clearRecordFilters" type="button">전체 보기</button>
+      </div>
+      <p id="filterCount" class="hint" role="status"></p>
+      <ul id="savedRecords"></ul>
+    </section>
     <textarea id="copyText" readonly rows="11" aria-label="복사할 기록"></textarea>
     <p class="hint" id="recordHint"></p>
   </details>
@@ -578,6 +589,7 @@ let recordId = null;
 let savedRecordId = null;
 let pendingRecord = null;
 let accountUser = null;
+let loadedRecords = [];
 try { pendingRecord = JSON.parse(load(draftKey) || "null"); } catch {}
 $("recordDate").value = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
 $("retryRecord").hidden = !pendingRecord;
@@ -601,14 +613,32 @@ async function recordRequest(action, data) {
 function showAccount(user) {
   if (accountUser !== user) {
     $("savedRecords").replaceChildren();
+    loadedRecords = [];
+    $("recordBrowser").hidden = true;
     recordId = null;
   }
   accountUser = user;
+  $("accountToggle").textContent = user ? user + " · 내 계정" : "로그인 / 회원가입";
   $("accountForm").hidden = !!user;
   $("accountSession").hidden = !user;
   $("accountName").textContent = user ? user + " 로그인 중" : "";
 }
 
+$("accountToggle").onclick = () => {
+  const open = $("accountPanel").hidden;
+  $("accountPanel").hidden = !open;
+  $("accountToggle").setAttribute("aria-expanded", String(open));
+  if (open && !accountUser) $("accountUser").focus();
+};
+function requireAccount() {
+  if (accountUser) return true;
+  $("accountPanel").hidden = false;
+  $("accountToggle").setAttribute("aria-expanded", "true");
+  $("accountStatus").textContent = "로그인하면 내 계정으로 기록을 저장하고 불러올 수 있습니다.";
+  $("accountUser").focus();
+  recordStatus.textContent = "먼저 상단에서 로그인해 주세요.";
+  return false;
+}
 async function authenticate(action) {
   if (!$("accountForm").reportValidity()) return;
   const buttons = [...$("accountForm").querySelectorAll("button")];
@@ -619,9 +649,9 @@ async function authenticate(action) {
     });
     showAccount(result.user);
     $("accountPassword").value = "";
-    recordStatus.textContent = action === "signup" ? "가입하고 로그인했습니다." : "로그인했습니다.";
+    $("accountStatus").textContent = recordStatus.textContent = action === "signup" ? "가입하고 로그인했습니다." : "로그인했습니다.";
   } catch (error) {
-    recordStatus.textContent = error.message;
+    $("accountStatus").textContent = error.message;
   } finally {
     buttons.forEach(button => button.disabled = false);
   }
@@ -635,23 +665,20 @@ $("logoutRecord").onclick = async () => {
   try {
     await recordRequest("logout");
     showAccount(null);
-    recordStatus.textContent = "로그아웃했습니다.";
+    $("accountStatus").textContent = recordStatus.textContent = "로그아웃했습니다.";
   } catch (error) {
-    recordStatus.textContent = error.message;
+    $("accountStatus").textContent = error.message;
   }
 };
 recordRequest("session").then(result => showAccount(result.user)).catch(() => {});
 
 async function submitRecord(record) {
-  if (!accountUser) {
-    recordStatus.textContent = "먼저 로그인해 주세요.";
-    return;
-  }
+  if (!requireAccount()) return;
   if (record.owner && record.owner !== accountUser) {
     recordStatus.textContent = "이 기록을 작성한 계정으로 로그인해 주세요.";
     return;
   }
-  record = { ...record, owner: accountUser };
+  record = { ...record, name: accountUser, owner: accountUser };
   $("saveRecord").disabled = $("retryRecord").disabled = true;
   pendingRecord = record;
   store(draftKey, JSON.stringify(record));
@@ -680,6 +707,7 @@ async function submitRecord(record) {
 
 recordForm.addEventListener("submit", event => {
   event.preventDefault();
+  if (!requireAccount()) return;
   if (pendingRecord) {
     recordStatus.textContent = "미전송 기록부터 다시 저장해 주세요.";
     return;
@@ -693,11 +721,11 @@ recordForm.addEventListener("submit", event => {
     recordStatus.textContent = "연습을 진행한 뒤 완료하거나 일시정지하고 저장해 주세요.";
     return;
   }
-  const name = $("recordName").value.trim();
+  const name = accountUser;
   const topic = $("topic").value.trim();
   const date = $("recordDate").value;
   if (!name || !topic || !date) {
-    recordStatus.textContent = "이름, 주제, 작성일을 입력해 주세요.";
+    recordStatus.textContent = "주제와 작성일을 입력해 주세요.";
     return;
   }
   recordId ||= crypto.randomUUID();
@@ -712,10 +740,7 @@ $("retryRecord").onclick = () => {
   if (pendingRecord) submitRecord(pendingRecord);
 };
 $("loadRecords").onclick = async () => {
-  if (!accountUser) {
-    recordStatus.textContent = "먼저 로그인해 주세요.";
-    return;
-  }
+  if (!requireAccount()) return;
   const list = $("savedRecords");
   list.replaceChildren();
   $("loadRecords").disabled = true;
@@ -723,7 +748,36 @@ $("loadRecords").onclick = async () => {
     const user = accountUser;
     const { records } = await recordRequest("list");
     if (accountUser !== user) return;
-    for (const r of records) {
+    loadedRecords = records;
+    $("recordBrowser").hidden = false;
+    setFilterOptions($("filterDate"), records.map(r => r.date).sort().reverse(), "전체 날짜");
+    $("filterTopic").value = "";
+    updateTopicFilter();
+    renderSavedRecords();
+    recordStatus.textContent = records.length ? "최근 기록 " + records.length + "건을 불러왔습니다." : "저장된 기록이 없습니다.";
+  } catch (error) {
+    recordStatus.textContent = error.message;
+  } finally {
+    $("loadRecords").disabled = false;
+  }
+};
+
+function setFilterOptions(select, values, label) {
+  const previous = select.value;
+  select.replaceChildren(new Option(label, ""));
+  [...new Set(values)].forEach(value => select.add(new Option(value, value)));
+  if (values.includes(previous)) select.value = previous;
+}
+function updateTopicFilter() {
+  const date = $("filterDate").value;
+  setFilterOptions($("filterTopic"), loadedRecords.filter(r => !date || r.date === date).map(r => r.topic), "전체 주제");
+}
+function renderSavedRecords() {
+  const date = $("filterDate").value, topic = $("filterTopic").value;
+  const filtered = loadedRecords.filter(r => (!date || r.date === date) && (!topic || r.topic === topic));
+  const list = $("savedRecords");
+  list.replaceChildren();
+    for (const r of filtered) {
       const entry = document.createElement("li");
       const detail = document.createElement("details");
       const label = document.createElement("summary");
@@ -740,12 +794,15 @@ $("loadRecords").onclick = async () => {
       entry.append(detail);
       list.append(entry);
     }
-    recordStatus.textContent = records.length ? "최근 기록 " + records.length + "건을 불러왔습니다." : "저장된 기록이 없습니다.";
-  } catch (error) {
-    recordStatus.textContent = error.message;
-  } finally {
-    $("loadRecords").disabled = false;
-  }
+
+  $("filterCount").textContent = filtered.length ? filtered.length + "건 · 기록을 누르면 구간별 내용을 볼 수 있습니다." : "선택한 조건의 기록이 없습니다.";
+}
+$("filterDate").onchange = () => { updateTopicFilter(); renderSavedRecords(); };
+$("filterTopic").onchange = renderSavedRecords;
+$("clearRecordFilters").onclick = () => {
+  $("filterDate").value = "";
+  $("filterTopic").value = "";
+  updateTopicFilter(); renderSavedRecords();
 };
 
 renderPolicy();
