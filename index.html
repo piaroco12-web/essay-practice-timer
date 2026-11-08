@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>논술·실무 타이머</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 답안지 한 장 — 위에 큰 잔여 시간, 아래 6구간 진행 띠, 현재 구간 할 일, 구간 기록표 */
+:root{
+  --paper:#eef1f4; --sheet:#fbfcfd; --ink:#1d2a44; --ink-soft:#5a6782; --rule:#cfd6e0;
+  --pen:#c8323c; --pen-soft:#f6dcde; --done:#2f7a5b;
+  --s1:#8aa0c8; --s2:#6f88b8; --s3:#56709f; --s4:#2f4a7d; --s5:#6f88b8; --s6:#a7b4c9;
+  --display:"Gowun Batang",serif; --body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#11161f; --sheet:#171e2a; --ink:#e3e8f1; --ink-soft:#97a3ba; --rule:#2c3647;
+  --pen:#ff6b73; --pen-soft:#3a1d22; --done:#5fc79a;
+  --s1:#3d5175; --s2:#4b6290; --s3:#5b75a8; --s4:#7d98cf; --s5:#4b6290; --s6:#36435a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#11161f; --sheet:#171e2a; --ink:#e3e8f1; --ink-soft:#97a3ba; --rule:#2c3647;
+  --pen:#ff6b73; --pen-soft:#3a1d22; --done:#5fc79a;
+  --s1:#3d5175; --s2:#4b6290; --s3:#5b75a8; --s4:#7d98cf; --s5:#4b6290; --s6:#36435a; color-scheme:dark}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:760px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px}
+h1{font-family:var(--display);font-size:1.5rem;margin:0;text-wrap:balance}
+.sub{color:var(--ink-soft);font-size:.85rem}
+.sheet{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:20px}
+.clock{display:grid;gap:4px;justify-items:center;text-align:center}
+.label{font-size:.75rem;letter-spacing:.08em;color:var(--ink-soft)}
+.big{font-family:var(--mono);font-weight:600;font-size:clamp(3.6rem,17vw,6.5rem);line-height:1;font-variant-numeric:tabular-nums}
+.big.warn{color:var(--pen)}
+.elapsed{font-family:var(--mono);color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.bar{display:flex;height:34px;border-radius:4px;overflow:hidden;position:relative;margin-top:16px;border:1px solid var(--rule)}
+.seg{display:flex;align-items:center;justify-content:center;font-size:.72rem;color:#fff;white-space:nowrap;overflow:hidden;min-width:0;opacity:.55}
+.seg.cur{opacity:1}
+.seg.past{opacity:.25}
+.needle{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--pen);left:0}
+.ticks{display:flex;font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);margin-top:4px;position:relative;height:1em}
+.ticks span{position:absolute;transform:translateX(-50%)}
+.stage{display:grid;gap:6px}
+.stage h2{font-family:var(--display);font-size:1.3rem;margin:0}
+.stage .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline}
+.stage .left{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.stage .left b{color:var(--ink)}
+.stage p{margin:0}
+.next{color:var(--ink-soft);font-size:.85rem}
+.checks{display:grid;gap:4px;margin:6px 0 0;padding:0;list-style:none}
+.checks label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.checks input{margin-top:5px}
+.controls{display:flex;flex-wrap:wrap;gap:8px}
+button,select{font:inherit;border-radius:4px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);padding:10px 16px;cursor:pointer}
+button.primary{background:var(--ink);color:var(--sheet);border-color:var(--ink);font-weight:700;min-width:110px}
+button.lap{border-color:var(--pen);color:var(--pen)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+.settings{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:.9rem}
+.settings label{display:flex;gap:6px;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:left}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.over{color:var(--pen);font-weight:600}
+.under{color:var(--done)}
+.tablebox{overflow-x:auto}
+.hint{font-size:.82rem;color:var(--ink-soft);margin:8px 0 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 차분한 종이와 녹색 잉크 */
+:root{--paper:#f5f3ec;--sheet:#f5f3ec;--ink:#252d29;--ink-soft:#68716a;--rule:#d3d8ce;--pen:#a34a32;--pen-soft:#eee0d6;--done:#38634f;--accent:#315d49;--active-ink:#fffdf5;--s1:#dce2d7;--s2:#d5ddd1;--s3:#ccd7c8;--s4:#bdcebb;--s5:#d5ddd1;--s6:#e1e5db;color-scheme:light}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#1a211e;--sheet:#1a211e;--ink:#e6e9df;--ink-soft:#a6b1a5;--rule:#3c493f;--pen:#e5aa88;--pen-soft:#3c2d25;--done:#a6c7a5;--accent:#b6cfa9;--active-ink:#18221b;--s1:#303c33;--s2:#354237;--s3:#3a493c;--s4:#465b48;--s5:#354237;--s6:#303b32;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#1a211e;--sheet:#1a211e;--ink:#e6e9df;--ink-soft:#a6b1a5;--rule:#3c493f;--pen:#e5aa88;--pen-soft:#3c2d25;--done:#a6c7a5;--accent:#b6cfa9;--active-ink:#18221b;--s1:#303c33;--s2:#354237;--s3:#3a493c;--s4:#465b48;--s5:#354237;--s6:#303b32;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;border-top:5px solid var(--accent);transition:background-color .6s,color .6s}button,select{min-height:44px;border-radius:3px}button:hover{border-color:var(--accent)}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}[hidden]{display:none!important}
+.wrap{max-width:1120px;gap:0;padding-block:24px 32px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}header{padding-bottom:20px;border-bottom:1px solid var(--rule);align-items:center}h1{font-family:var(--body);font-size:18px;font-weight:500;letter-spacing:-.04em}.sub{font-size:12px}.header-tools{display:flex;align-items:center;gap:18px}.theme{font-size:12px;padding:6px 10px;min-height:36px;background:transparent}.sheet{border:0;border-radius:0;padding:0;background:transparent}.timer-sheet{padding-top:26px}.clock{gap:8px}.label{font-size:13px;letter-spacing:.15em}.big{font-size:clamp(100px,17vw,202px);letter-spacing:-.065em;line-height:1.16;color:var(--ink);font-weight:500}.elapsed{font-size:13px;letter-spacing:.02em}.stage{margin:24px 0 26px;text-align:center;gap:10px}.stage .row{display:grid;justify-content:center;gap:3px}.stage h2{font-size:clamp(32px,4vw,48px);font-weight:700;letter-spacing:-.04em;color:var(--accent)}.stage .left{font-family:var(--body);font-size:14px}.stage .left b{font-family:var(--mono);margin-left:8px}.stage p{max-width:760px;justify-self:center;color:var(--ink-soft);font-size:15px;line-height:1.8}.next{font-size:13px}.timeline{margin:24px 0 0}.bar{height:62px;border:0;border-radius:2px;overflow:visible;margin-top:0;gap:3px}.seg{position:relative;flex-direction:column;color:var(--ink-soft);opacity:1;font-size:13px;border-radius:2px;line-height:1.4;overflow:visible}.seg small{font-family:var(--mono);font-size:10px;margin-top:4px}.seg.cur{background:var(--accent)!important;color:var(--active-ink);font-weight:700;outline:2px solid var(--accent);outline-offset:3px}.seg.past{opacity:.5}.needle{top:0;bottom:0;width:2px;background:var(--active-ink);z-index:2;box-shadow:0 0 0 1px var(--accent);pointer-events:none}.needle:before{content:"";position:absolute;top:-12px;left:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--accent)}.ticks{margin-top:11px;font-size:10px}.timeline-caption{display:flex;justify-content:space-between;color:var(--ink-soft);font-size:11px;margin-top:12px}.controls{justify-content:center;gap:10px;padding-bottom:26px;border-bottom:1px solid var(--rule)}.controls button{padding:12px 22px;font-size:14px}.controls .primary{background:var(--accent);color:var(--active-ink);border-color:var(--accent);min-width:140px}.controls .lap{color:var(--accent);border-color:var(--accent)}#fsBtn{border-color:transparent;color:var(--ink-soft)}.settings-sheet{padding:20px 0;border-bottom:1px solid var(--rule)}.settings{justify-content:space-between;font-size:13px}.settings select{font-size:13px;padding:7px 10px}.hint{font-size:12px;line-height:1.8;max-width:850px;margin-top:12px}.records{margin-top:20px}.records summary{cursor:pointer;min-height:44px;color:var(--ink-soft);font-size:14px}.records summary span{float:right;font-size:12px}.tablebox{margin-top:12px}th,td{padding:11px 8px}th{font-weight:500;color:var(--ink-soft)}.checks{max-width:760px;justify-self:center;text-align:left;gap:8px;padding:16px 0;width:100%;font-size:14px}.checks input{accent-color:var(--accent);width:17px;height:17px;flex-shrink:0}.status{font-size:12px;color:var(--accent);display:flex;align-items:center;gap:7px}.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}.notice{min-height:23px;margin:4px 0 0;text-align:center;color:var(--pen);font-size:13px}.running .settings-sheet,.running .records{display:none}.running header .sub{display:none}.warning{border-top-color:var(--pen)}.warning .big,.warning .stage h2,.warning .status{color:var(--pen)}.warning .clock,.finished .clock{background:var(--pen-soft);border-radius:3px}.changed .stage h2{color:var(--pen)}
+.stage p{min-height:3.6em}.stage p.fade{animation:tipIn .6s ease}@keyframes tipIn{from{opacity:0}to{opacity:1}}@media (prefers-reduced-motion:reduce){.stage p.fade{animation:none}}
+.timeline{cursor:ew-resize;touch-action:none;user-select:none;-webkit-user-select:none}.timeline:focus-visible{outline:2px solid var(--accent);outline-offset:8px}
+.track-label{display:flex;justify-content:space-between;gap:8px;font-size:11px;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 16px}.track-label.second{margin-top:22px;margin-bottom:8px}
+.actual{position:relative;height:50px;border:1px dashed var(--rule);border-radius:2px}#asegs{position:absolute;inset:0}
+.aseg{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;line-height:1.3;color:var(--ink-soft);white-space:nowrap;overflow:hidden;border-right:2px solid var(--paper)}.aseg small{font-family:var(--mono);font-size:10px}.aseg.cur{background:var(--accent)!important;color:var(--active-ink);font-weight:700}
+.needle2{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);z-index:2;pointer-events:none;left:0}
+.over-time{color:var(--pen)}
+.copybox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}.copybox label{display:flex;gap:8px;align-items:center;flex:1 1 260px;font-size:13px;color:var(--ink-soft)}.copybox input{flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--rule);border-radius:3px;background:transparent;color:var(--ink)}#copyBtn{background:var(--accent);color:var(--active-ink);border-color:var(--accent);font-weight:700}#copyText{width:100%;margin-top:10px;font-family:var(--mono);font-size:12px;line-height:1.6;padding:10px;border:1px solid var(--rule);border-radius:3px;background:transparent;color:var(--ink-soft);resize:vertical}
+.aover{position:absolute;right:4px;top:50%;transform:translateY(-50%);z-index:3;background:var(--pen);color:var(--active-ink);font-size:11px;font-weight:700;padding:2px 6px;border-radius:2px;font-family:var(--mono)}
+/* 모드 선택: 준비 상태에서는 카드, 그 밖에는 머리말 토글 */
+.mode-toggle{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}.mode-toggle button{min-height:36px;padding:6px 12px;font-size:12px;border:0;border-radius:0;background:transparent;color:var(--ink-soft)}.mode-toggle button[aria-pressed="true"]{background:var(--accent);color:var(--active-ink);font-weight:700}
+.mode-pick{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:22px}.mode-card{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;align-items:center;text-align:left;padding:16px 18px;border:1px solid var(--rule);background:transparent;color:var(--ink)}.mode-card svg{grid-row:span 2;width:34px;height:34px;color:var(--ink-soft)}.mode-card b{font-size:17px}.mode-card span{font-size:12px;color:var(--ink-soft)}.mode-card[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.mode-card[aria-pressed="true"] svg{color:var(--accent)}
+.ready .mode-toggle{display:none}body:not(.ready) .mode-pick{display:none}
+/* 모션 (코덱스 motion_codex.css) */
+.silmu-mode-enter{animation:silmu-mode-enter 220ms ease-out both}.silmu-stage-enter{animation:silmu-stage-enter 260ms ease-out both}.silmu-warning-enter{outline:2px solid transparent;outline-offset:3px;animation:silmu-warning-enter 720ms ease-out}
+@keyframes silmu-mode-enter{from{opacity:.72;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}@keyframes silmu-stage-enter{from{opacity:.75;transform:translateX(4px)}to{opacity:1;transform:translateX(0)}}@keyframes silmu-warning-enter{from{outline-color:var(--pen)}to{outline-color:transparent}}
+@media (prefers-reduced-motion:reduce){.silmu-mode-enter,.silmu-stage-enter,.silmu-warning-enter{animation:none}}
+/* 충남교육 정책 노트 (데이터: 충남교육_정책노트_codex) — 진행 중에는 숨김 */
+.running .policy{display:none}.policy{padding:20px 0;border-bottom:1px solid var(--rule)}.policy>summary{cursor:pointer;min-height:44px;font-size:14px;color:var(--ink-soft)}.policy>summary span{float:right;font-size:12px}
+.pn-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:20px;align-items:center;margin-top:12px}.pn-hero img{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:3px;display:block}.pn-vision{font-size:clamp(22px,3vw,30px);font-weight:700;letter-spacing:-.03em;color:var(--accent);margin:0}.pn-ind{margin:6px 0 0;font-size:15px}.pn-src{font-size:11px;color:var(--ink-soft);margin:10px 0 0}
+.pn h3{font-size:15px;margin:24px 0 8px;font-weight:700}.pn ol,.pn ul{margin:0;padding:0;list-style:none}.pn li{border-bottom:1px solid var(--rule)}.pn details>summary{cursor:pointer;padding:10px 0;font-size:14px}.pn .code{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-right:8px}.pn .sub-list{padding:0 0 10px 18px;font-size:13px}.pn .sub-list li{border:0;padding:3px 0}.pn .grp{font-weight:500;margin-top:6px}
+.pn-search{display:flex;gap:8px;align-items:center;margin-top:20px}.pn-search input{flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--rule);border-radius:3px;background:transparent;color:var(--ink)}.pn-result{font-size:13px;color:var(--ink-soft);margin:8px 0 0}.pn mark{background:var(--pen-soft);color:inherit}
+.pn-pri summary b{font-family:var(--mono);color:var(--accent);margin-right:8px}.pn-pri .topic{font-size:12px;color:var(--ink-soft);margin-left:6px}.pn-sent{display:grid;gap:8px;padding:0 0 12px}.pn-sent p{margin:0;font-size:13px;line-height:1.7}.pn-sent em{font-style:normal;font-size:11px;color:var(--accent);margin-right:6px}.pn-sent .row{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.pn-sent button{min-height:32px;padding:4px 10px;font-size:12px;flex-shrink:0}.pn-links{font-size:12px;color:var(--ink-soft)}.pn .sub-list details.task>summary{padding:4px 0;font-size:13px}.pn .tdet{padding:4px 0 10px 12px;border-left:2px solid var(--rule);margin-left:4px}.pn-note{font-size:11px;color:var(--ink-soft);margin:8px 0 0}
+@media(max-width:600px){.pn-hero{grid-template-columns:1fr}.pn-hero img{order:2}}
+@media(max-width:600px){.mode-pick{gap:8px;padding-top:18px}.mode-card{padding:12px;gap:2px 10px}.mode-card svg{width:26px;height:26px}.mode-card b{font-size:15px}.mode-card span{font-size:11px}.mode-toggle button{padding:6px 9px}}
+@media(max-width:600px){.wrap{padding-block:16px 28px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}header{gap:12px;padding-bottom:15px}h1{font-size:15px}.header-tools{gap:10px}.header-tools .sub{display:none}.status{font-size:11px}.timer-sheet{padding-top:25px}.big{font-size:clamp(76px,23vw,138px)}.stage{margin-top:20px;margin-bottom:22px}.stage h2{font-size:34px}.stage p{font-size:13px}.bar{height:55px;gap:2px}.seg{font-size:11px}.seg small{font-size:9px}.controls{gap:8px;padding-bottom:20px}.controls button{padding:10px 12px;flex:1;white-space:nowrap}.controls .primary{min-width:90px}#fsBtn{flex-basis:100%;padding:3px;min-height:36px}.settings{gap:16px}.records summary span{font-size:11px}.timeline-caption{font-size:10px}.stage .left{font-size:12px}.elapsed{font-size:11px}}
+</style>
+</head>
+<body class="ready">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="essay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H4a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-2"/><path d="M6 7h5M6 10h4M6 13h2M8 7v6"/><path d="m11 15 7.5-7.5 3 3L14 18l-4 1 1-4Zm5.9-5.9 3 3"/></symbol>
+  <symbol id="silmu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3Zm10 0v4h4"/><path d="M8 8h4m-4 3h8v7H8zm0 3h8m-5-3v7"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">논술 페이스 타이머</h1>
+    <div class="header-tools"><div class="mode-toggle" role="group" aria-label="모드"><button type="button" data-mode="essay">논술</button><button type="button" data-mode="practice">실무</button></div><span class="sub" id="sub">교육정책 논술 연습</span><span class="status" id="status">준비</span><button class="theme" id="themeBtn">테마: 자동</button></div>
+  </header>
+
+  <section class="mode-pick" aria-label="연습 모드 선택">
+    <button type="button" class="mode-card" data-mode="essay"><svg aria-hidden="true"><use href="#essay-icon"/></svg><b>논술</b><span>1교시 교육정책 논술 · A4 2매 50분</span></button>
+    <button type="button" class="mode-card" data-mode="practice"><svg aria-hidden="true"><use href="#silmu-icon"/></svg><b>실무</b><span>2교시 실무 기획안 · A4 3매 70분</span></button>
+  </section>
+
+  <section class="sheet timer-sheet" aria-label="시험 타이머">
+    <div class="clock">
+      <span class="label" id="remainLabel">남은 시간</span>
+      <div class="big" id="remain">50:00</div>
+      <span class="elapsed" id="elapsed">경과 00:00 / 50:00</span>
+    </div>
+    <p class="notice" id="notice" role="status"></p>
+    <div class="timeline" id="timeline" tabindex="0" role="slider" aria-label="경과 시간 조정" aria-valuemin="0">
+      <div class="track-label"><span>추천 계획</span><span id="planCaption">8문장 뼈대 배분</span></div>
+      <div class="bar" id="bar"><div class="needle" id="needle"></div></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="track-label second"><span>내 실제 진행</span><span>「이 구간 끝냄」을 누를 때마다 기록</span></div>
+      <div class="actual" id="actual"><div id="asegs"></div><div class="needle2" id="needle2"></div></div>
+      <div class="timeline-caption"><span>띠를 누르거나 끌어서 경과 시간을 고칠 수 있습니다 · 키보드 ←/→ 30초</span><span>▼ 현재 위치</span></div>
+    </div>
+  </section>
+
+  <section class="sheet stage" aria-live="polite">
+    <div class="row">
+      <h2 id="stName">개요</h2>
+      <span class="left">이 구간 남은 시간 <b id="stLeft">8:00</b></span>
+    </div>
+    <p id="stTodo"></p>
+    <ul class="checks" id="checks" hidden></ul>
+    <span class="next" id="stNext"></span>
+  </section>
+
+  <div class="controls">
+    <button class="primary" id="startBtn">시작</button>
+    <button class="lap" id="lapBtn" disabled>이 구간 끝냄</button>
+    <button id="resetBtn">처음부터</button>
+    <button id="fsBtn">전체 화면</button>
+  </div>
+
+  <section class="sheet settings-sheet">
+    <div class="settings">
+      <label for="total">시험 시간
+        <select id="total"></select>
+      </label>
+      <label for="preset" id="presetWrap">기획안 유형
+        <select id="preset"></select>
+      </label>
+      <label for="sound"><input type="checkbox" id="sound" checked> 구간 전환 알림음</label>
+    </div>
+    <p class="hint"><span id="ratioHint"></span> 쓰는 도중에 한 구간을 마칠 때마다 「이 구간 끝냄」을 누르면 다음 구간으로 넘어가고, 아래 띠와 기록표에 실제 소요 시간이 남습니다. 잘못 눌렀거나 시간을 고치려면 띠를 끌어 옮기세요. 기준 시간이 지나도 마지막 구간까지 계속 기록됩니다. 구간 조언은 10초마다 바뀝니다.</p>
+  </section>
+
+  <details class="sheet policy" id="policy">
+    <summary>충남교육 정책 노트 <span>비전 · 5대 정책방향 · 8대 중점과제 · 과제 찾기</span></summary>
+    <div class="pn" id="pn"></div>
+  </details>
+
+  <details class="sheet records" id="records">
+    <summary>구간 기록표 <span>계획 대비 실제 소요 시간</span></summary>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>구간</th><th class="n">계획</th><th class="n">실제</th><th class="n">차이</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+    </div>
+    <div class="copybox">
+      <label for="topic"><span id="topicLabel">논제</span> <input id="topic" type="text" placeholder="선택 · 예: 기초학력 보장 충남온학력"></label>
+      <button id="copyBtn" type="button">기록 복사</button>
+    </div>
+    <textarea id="copyText" readonly rows="11" aria-label="복사할 기록"></textarea>
+    <p class="hint" id="recordHint"></p>
+  </details>
+</div>
+
+<script>
+const ESSAY_STAGES=[
+ {name:"개요",min:8,c:"--s1",tips:[
+  "발문 요구사항에 밑줄, 단서별로 쪼개기. 8칸에 키워드만 채운다. 문장은 쓰지 않는다.",
+  "지시문을 동사 단위로 쪼개 단서 가·나·다 체크리스트를 만든다. 지시문 문구는 소제목에 그대로 쓴다.",
+  "진단 틀을 하나 고른다. 구조형(제도→학교→교실), 자원형(인적→물적→제도적), 주체형(교사→학생→학부모·지역).",
+  "문제점 수가 곧 방안 수다. 3개를 진단했으면 3개를 처방한다.",
+  "단서별 분량 몫을 먼저 정한다. 한 단서에 몰아 쓰면 다른 단서가 들어갈 자리가 없다.",
+  "표마다 해석 문장 1개, 방안마다 누가·언제·어떻게 확인할지 칸을 비워 둔다."]},
+ {name:"서론",min:5,c:"--s2",tips:[
+  "4문장: 起 정책 배경(연도·정책명·법령) → 承 그러나 현장의 간극 → 轉 당위(학습권 등 가치어) → 結 진단 축·제안 축·방안 개수 예고.",
+  "첫 문장에 연도·정책명·법령 중 고유명사 하나. ‘급변하는 사회 속에서’는 어떤 논제도 열지 못한다.",
+  "起가 제도를 말했다면 承은 사람을 말한다. 교사·수업·학생의 언어로 간극을 드러낸다.",
+  "轉에 가치어 하나를 못 박는다. 학습권, 교육 기회의 형평성, 교육활동 보호, 교육의 공공성.",
+  "마지막 문장은 지시문 문구 그대로, 방안 개수까지 밝힌다. ‘살펴보고자 한다’로만 끝내지 않는다."]},
+ {name:"본론 1",min:9,c:"--s3",tips:[
+  "현황 2문장 + 문제점 3개. 문제점마다 현상 1문장 + 원인 1문장. 자료 용어로, 표마다 해석 문장 1개.",
+  "현상만 쓰면 불평이 되고, 원인까지 짚어야 진단이 된다.",
+  "수치를 나열하지 말고 ‘그래서 무엇이 문제인가’로 해석한다. 집단 간 차이, 사례별 차이를 짚는다.",
+  "끝맺음은 ‘~에 머물러 있다 / 미흡하다 / 저조하다’. 문제 하나에 1~2줄.",
+  "소제목은 지시문 문구 그대로 쓴다. 현황·문제점, 시사점, 어려움 등 묻는 말 그대로."]},
+ {name:"본론 2",min:18,c:"--s4",tips:[
+  "리드문 → 방안 3개(문제점과 1:1). 방안마다 무엇을·누가·언제, 근거(법령·정책·현장 사례) 최소 둘, 기대효과.",
+  "방안 첫 문장은 논지다. 무엇을 + 지원 동사(구축·보급·지원·운영·안내·조성).",
+  "이름 없는 방안은 실행 계획으로 읽히지 않는다. 사업·조직·연수에 이름을 붙인다.",
+  "층위를 지킨다. 도교육청은 정책·예산, 교육지원청은 컨설팅·연수·업무 이관, 학교는 운영.",
+  "시점을 못 박는다. 학기 초·학년 말·연간, 그리고 결과를 다음 해 계획에 반영하는 환류.",
+  "빠진 대상이 없는지 본다. 학생·교사·학부모·학교·지역사회.",
+  "기대효과는 계획의 재진술이 아니라 결과다. 학생에게 무엇이 달라지는지 먼저."]},
+ {name:"결론",min:6,c:"--s5",tips:[
+  "비전 문구부터 적는다 → 논제 언어로 번역 → 교육전문직원으로서 할 일을 동사로 → 논제 핵심어로 수미상관.",
+  "비전 문구가 정확하지 않으면 인용하지 말고 자작 명제로 간다.",
+  "‘노력하겠다’ 대신 직무 동사. 컨설팅장학 설계, 연수 기획, 정책 실행 점검, 학교 지원.",
+  "마지막 문장에 논제 핵심어를 다시 등장시킨다. 서론 첫 문장과 같은 주제를 가리키는지 본다."]},
+ {name:"검토",min:4,c:"--s6",tips:[
+  "아래 항목을 빠르게 훑는다.",
+  "맞춤법보다 단서 누락부터 확인한다. 묻는 것을 다 썼는가.",
+  "법령명과 「 」 표기, 사업명 철자를 확인한다."]}
+];
+const ESSAY_CHECKS=["서론 起에 연도·정책명·법령 중 고유명사가 있다","본론 1 문제점 수 = 본론 2 방안 수","세부계획에 주체와 시점이 있다","근거가 사견에 머물지 않는다","법령명이 정확하고 「 」 표기가 있다","기대효과가 세부계획의 반복이 아니다","결론 轉에 직무가 보인다","결론 네 문장이 잘리지 않았다","성명란 등 신분 표시가 없다"];
+/* 실무 프리셋: 타이머_실무소재_codex\silmu_presets_codex.json (min = 70분 기준 비율) */
+const PRACTICE_PRESETS=[{"id":"operation","label":"운영 계획","stages":[{"name":"발문·자료","min":10,"tips":["발문 동사에 밑줄. 작성할 문서와 읽는 사람을 먼저 잡는다.","필수 조건을 한 줄씩 쪼갠다. 빠진 조건은 목차에 넣는다.","자료마다 쓸 숫자나 사례 하나에 표시한다.","기준 시점과 비교 대상을 함께 적는다.","대상과 운영 규모, 모집 조건을 표시한다."]},{"name":"목차·분량","min":7,"tips":["큰 제목을 발문 순서에 맞춰 놓는다.","1쪽에는 배경과 개요, 2쪽에는 핵심 실행, 3쪽에는 남은 계획과 환류 자리를 잡는다.","표는 비교하거나 역할을 나눌 때 쓴다. 제목과 단위 칸을 남긴다.","점검 시간을 남겨 두고 각 쪽의 마지막 항목을 정한다.","준비→당일→후속으로 자리 잡는다."]},{"name":"배경·개요","min":8,"tips":["배경에 자료 근거 하나, 목적에 바뀔 모습 하나.","대상·기간·범위를 개요에 모은다.","방침은 실제 실행 판단에 쓰일 기준으로 적는다.","앞부분이 길어지면 자료 설명부터 덜어낸다.","일시·장소·대상·운영 방식을 한눈에 모은다."]},{"name":"세부계획","min":30,"tips":["과제마다 담당·시점·대상·방법을 붙인다.","일정의 선후를 맞춘다. 모집 다음에 선정, 시행 다음에 점검.","예산이 필요하면 단가×수량과 합계를 확인한다.","현장에서 막힐 조건 하나에 대응 방법을 붙인다.","시간표에 회차별 내용과 담당을 맞물린다."]},{"name":"환류·마무리","min":9,"tips":["측정할 변화 하나와 확인할 시점을 정한다.","누가 결과를 보고 다음 계획에 반영하는지 쓴다.","제출물·기한·제출처는 발문이 요구한 범위에서 적는다.","기대효과는 실행 후 달라질 모습을 짧게 쓴다.","만족도와 현장 적용 결과를 각각 어떻게 볼지 정한다."]},{"name":"최종 검토","min":6,"tips":["발문의 요구를 손가락으로 따라가며 답안에서 하나씩 찾는다.","실제 답안지 쪽을 세고 3쪽 끝의 잘린 문장이나 표를 본다.","표 숫자·단위·합계, 일정의 선후를 한 번 더 본다.","지정 기재란 외 신분을 드러낼 만한 표시가 없는지 본다.","대상·인원·회차가 개요와 시간표에서 일치하는지 본다."]}],"checks":["발문이 지정한 문서 형식·제목·대상에 맞췄다","필수 조건을 하나씩 답안에서 찾을 수 있다","자료의 수치·단위·시점·출처 표기가 맞다","문제 또는 목적과 실행 과제가 연결된다","과제에 담당·시기·방법이 있다","일정 순서와 필요한 예산의 산식·합계가 맞다","점검·환류 또는 후속 조치의 담당과 시점이 보인다","지정 기재란 외 신분을 드러내는 표시가 없다","실제 답안지 기준 3쪽 이내이고 끝부분이 잘리지 않았다"]},{"id":"implementation","label":"실시·도입 계획","stages":[{"name":"발문·자료","min":10,"tips":["발문 동사에 밑줄. 작성할 문서와 읽는 사람을 먼저 잡는다.","필수 조건을 한 줄씩 쪼갠다. 빠진 조건은 목차에 넣는다.","자료마다 쓸 숫자나 사례 하나에 표시한다.","기준 시점과 비교 대상을 함께 적는다.","새로 시작하는 일과 기존에 하던 일을 표시한다."]},{"name":"목차·분량","min":7,"tips":["큰 제목을 발문 순서에 맞춰 놓는다.","1쪽에는 배경과 개요, 2쪽에는 핵심 실행, 3쪽에는 남은 계획과 환류 자리를 잡는다.","표는 비교하거나 역할을 나눌 때 쓴다. 제목과 단위 칸을 남긴다.","점검 시간을 남겨 두고 각 쪽의 마지막 항목을 정한다.","도입 필요성, 준비, 시행, 확대 순서를 잡는다."]},{"name":"배경·개요","min":8,"tips":["배경에 자료 근거 하나, 목적에 바뀔 모습 하나.","대상·기간·범위를 개요에 모은다.","방침은 실제 실행 판단에 쓰일 기준으로 적는다.","앞부분이 길어지면 자료 설명부터 덜어낸다.","도입 대상과 우선 적용 기준을 밝힌다."]},{"name":"세부계획","min":30,"tips":["과제마다 담당·시점·대상·방법을 붙인다.","일정의 선후를 맞춘다. 모집 다음에 선정, 시행 다음에 점검.","예산이 필요하면 단가×수량과 합계를 확인한다.","현장에서 막힐 조건 하나에 대응 방법을 붙인다.","시범 시행의 범위와 확대를 판단할 기준을 붙인다."]},{"name":"환류·마무리","min":9,"tips":["측정할 변화 하나와 확인할 시점을 정한다.","누가 결과를 보고 다음 계획에 반영하는지 쓴다.","제출물·기한·제출처는 발문이 요구한 범위에서 적는다.","기대효과는 실행 후 달라질 모습을 짧게 쓴다.","시범 결과가 다음 시행 단계에 어떻게 이어지는지 쓴다."]},{"name":"최종 검토","min":6,"tips":["발문의 요구를 손가락으로 따라가며 답안에서 하나씩 찾는다.","실제 답안지 쪽을 세고 3쪽 끝의 잘린 문장이나 표를 본다.","표 숫자·단위·합계, 일정의 선후를 한 번 더 본다.","지정 기재란 외 신분을 드러낼 만한 표시가 없는지 본다.","자원 확보보다 시행이 앞서지 않는지 본다."]}],"checks":["발문이 지정한 문서 형식·제목·대상에 맞췄다","필수 조건을 하나씩 답안에서 찾을 수 있다","자료의 수치·단위·시점·출처 표기가 맞다","문제 또는 목적과 실행 과제가 연결된다","과제에 담당·시기·방법이 있다","일정 순서와 필요한 예산의 산식·합계가 맞다","점검·환류 또는 후속 조치의 담당과 시점이 보인다","지정 기재란 외 신분을 드러내는 표시가 없다","실제 답안지 기준 3쪽 이내이고 끝부분이 잘리지 않았다"]},{"id":"improvement","label":"개선 계획","stages":[{"name":"발문·자료","min":14,"tips":["발문 동사에 밑줄. 작성할 문서와 읽는 사람을 먼저 잡는다.","필수 조건을 한 줄씩 쪼갠다. 빠진 조건은 목차에 넣는다.","자료마다 쓸 숫자나 사례 하나에 표시한다.","기준 시점과 비교 대상을 함께 적는다.","자료를 범주별로 묶고 원인으로 볼 수 있는 근거를 찾는다."]},{"name":"목차·분량","min":8,"tips":["큰 제목을 발문 순서에 맞춰 놓는다.","1쪽에는 배경과 개요, 2쪽에는 핵심 실행, 3쪽에는 남은 계획과 환류 자리를 잡는다.","표는 비교하거나 역할을 나눌 때 쓴다. 제목과 단위 칸을 남긴다.","점검 시간을 남겨 두고 각 쪽의 마지막 항목을 정한다.","문제 하나마다 개선 과제 하나를 나란히 놓는다."]},{"name":"배경·개요","min":9,"tips":["배경에 자료 근거 하나, 목적에 바뀔 모습 하나.","대상·기간·범위를 개요에 모은다.","방침은 실제 실행 판단에 쓰일 기준으로 적는다.","앞부분이 길어지면 자료 설명부터 덜어낸다.","기준값과 비교값을 짝지어 변화 방향을 쓴다."]},{"name":"세부계획","min":25,"tips":["과제마다 담당·시점·대상·방법을 붙인다.","일정의 선후를 맞춘다. 모집 다음에 선정, 시행 다음에 점검.","예산이 필요하면 단가×수량과 합계를 확인한다.","현장에서 막힐 조건 하나에 대응 방법을 붙인다.","과제마다 원인에 직접 닿는 조치와 담당을 적는다."]},{"name":"환류·마무리","min":8,"tips":["측정할 변화 하나와 확인할 시점을 정한다.","누가 결과를 보고 다음 계획에 반영하는지 쓴다.","제출물·기한·제출처는 발문이 요구한 범위에서 적는다.","기대효과는 실행 후 달라질 모습을 짧게 쓴다.","지표에 기준값·목표값·측정 시점을 붙인다."]},{"name":"최종 검토","min":6,"tips":["발문의 요구를 손가락으로 따라가며 답안에서 하나씩 찾는다.","실제 답안지 쪽을 세고 3쪽 끝의 잘린 문장이나 표를 본다.","표 숫자·단위·합계, 일정의 선후를 한 번 더 본다.","지정 기재란 외 신분을 드러낼 만한 표시가 없는지 본다.","문제와 과제의 대응이 끊긴 곳을 찾는다."]}],"checks":["발문이 지정한 문서 형식·제목·대상에 맞췄다","필수 조건을 하나씩 답안에서 찾을 수 있다","자료의 수치·단위·시점·출처 표기가 맞다","문제 또는 목적과 실행 과제가 연결된다","과제에 담당·시기·방법이 있다","일정 순서와 필요한 예산의 산식·합계가 맞다","점검·환류 또는 후속 조치의 담당과 시점이 보인다","지정 기재란 외 신분을 드러내는 표시가 없다","실제 답안지 기준 3쪽 이내이고 끝부분이 잘리지 않았다"]},{"id":"inspection","label":"점검 계획","stages":[{"name":"발문·자료","min":11,"tips":["발문 동사에 밑줄. 작성할 문서와 읽는 사람을 먼저 잡는다.","필수 조건을 한 줄씩 쪼갠다. 빠진 조건은 목차에 넣는다.","자료마다 쓸 숫자나 사례 하나에 표시한다.","기준 시점과 비교 대상을 함께 적는다.","점검 근거, 확인 대상, 필요한 증빙을 표시한다."]},{"name":"목차·분량","min":8,"tips":["큰 제목을 발문 순서에 맞춰 놓는다.","1쪽에는 배경과 개요, 2쪽에는 핵심 실행, 3쪽에는 남은 계획과 환류 자리를 잡는다.","표는 비교하거나 역할을 나눌 때 쓴다. 제목과 단위 칸을 남긴다.","점검 시간을 남겨 두고 각 쪽의 마지막 항목을 정한다.","점검 기준·증빙·결과 조치에 각각 자리를 준다."]},{"name":"배경·개요","min":8,"tips":["배경에 자료 근거 하나, 목적에 바뀔 모습 하나.","대상·기간·범위를 개요에 모은다.","방침은 실제 실행 판단에 쓰일 기준으로 적는다.","앞부분이 길어지면 자료 설명부터 덜어낸다.","점검 기간·범위와 점검 주체를 한곳에 모은다."]},{"name":"세부계획","min":25,"tips":["과제마다 담당·시점·대상·방법을 붙인다.","일정의 선후를 맞춘다. 모집 다음에 선정, 시행 다음에 점검.","예산이 필요하면 단가×수량과 합계를 확인한다.","현장에서 막힐 조건 하나에 대응 방법을 붙인다.","항목마다 무엇을 보면 충족인지 판정할 기준을 쓴다."]},{"name":"환류·마무리","min":11,"tips":["측정할 변화 하나와 확인할 시점을 정한다.","누가 결과를 보고 다음 계획에 반영하는지 쓴다.","제출물·기한·제출처는 발문이 요구한 범위에서 적는다.","기대효과는 실행 후 달라질 모습을 짧게 쓴다.","미충족 항목의 통지→보완→재확인 시점을 붙인다."]},{"name":"최종 검토","min":7,"tips":["발문의 요구를 손가락으로 따라가며 답안에서 하나씩 찾는다.","실제 답안지 쪽을 세고 3쪽 끝의 잘린 문장이나 표를 본다.","표 숫자·단위·합계, 일정의 선후를 한 번 더 본다.","지정 기재란 외 신분을 드러낼 만한 표시가 없는지 본다.","점검 기준과 증빙이 짝을 이루는지 본다."]}],"checks":["발문이 지정한 문서 형식·제목·대상에 맞췄다","필수 조건을 하나씩 답안에서 찾을 수 있다","자료의 수치·단위·시점·출처 표기가 맞다","문제 또는 목적과 실행 과제가 연결된다","과제에 담당·시기·방법이 있다","일정 순서와 필요한 예산의 산식·합계가 맞다","점검·환류 또는 후속 조치의 담당과 시점이 보인다","지정 기재란 외 신분을 드러내는 표시가 없다","실제 답안지 기준 3쪽 이내이고 끝부분이 잘리지 않았다"]}];
+const MODES={
+ essay:{title:"논술 페이스 타이머",sub:"교육정책 논술 연습",defaultTotal:50,notes:{30:"단축 연습",50:"A4 2매"},
+  presets:[{id:"default",label:"8문장 뼈대",stages:ESSAY_STAGES,checks:ESSAY_CHECKS}],
+  topicLabel:"논제",topicPh:"선택 · 예: 기초학력 보장 충남온학력",recordTitle:"[논술 연습 기록]",
+  recordHint:"본론 2가 가장 길어야 합니다. 서론·결론 합계가 전체의 3분의 1을 넘으면 본론 2 세부계획이 잘립니다.",
+  warn5:"종료까지 5분 이내 · 답안을 마무리하세요.",overText:"결론까지 쓰고 「이 구간 끝냄」을 누르세요."},
+ practice:{title:"실무 페이스 타이머",sub:"교육전문직실무 기획안 연습",defaultTotal:70,notes:{70:"A4 3매 · 제38기 기준"},
+  presets:PRACTICE_PRESETS,
+  topicLabel:"과제",topicPh:"선택 · 예: AI·디지털 활용 교육 운영 계획",recordTitle:"[실무 연습 기록]",
+  recordHint:"세부계획이 가장 길어야 합니다. 답안은 실제 답안지 기준 3쪽 이내입니다(제38기 기준 3쪽 초과 답안지 폐기, 제39기 기준은 공고 확인 필요).",
+  warn5:"남은 시간 5분 · 새 항목을 늘리기 전에 빠진 조건과 실제 쪽수를 확인하세요.",overText:"최종 검토까지 마치고 「이 구간 끝냄」을 누르세요."}
+};
+/* 충남교육 정책 데이터: 충남교육_정책노트_codex\충남교육_정책데이터_codex.json (2027 주요업무계획 제2차(안), 2026-10-19) */
+const POLICY={"source":{"title":"2027년 충남교육 주요업무계획 제2차(안)","status":"draft","asOf":"2026-10-19","checkedOn":"2026-11-08","publicationCheck":"[확인 필요] 최신 공개 확정판"},"vision":"모두의 성장 미래동행 충남교육","indicator":"삶의 주체로 함께 성장하는 세계시민","directions":[{"id":"V1","title":"주도성을 키우는 성장·맞춤교육"},{"id":"V2","title":"서로를 존중하는 상생·시민교육"},{"id":"V3","title":"내일이 기대되는 AI·미래교육"},{"id":"V4","title":"모두를 품는 안심·책임교육"},{"id":"V5","title":"현장을 지원하는 신뢰·소통행정"}],"priorities":[{"id":1,"topic":"평가 혁신","title":"학생의 주도적 성장을 지원하는 교육과정·수업·평가 혁신","studyLinks":["1-1-5","1-1-2"],"sentences":{"essay":{"diagnosis":"평가 결과가 점수 안내에 그치면 학생은 다음 학습에서 무엇을 바꿔야 하는지 알기 어렵다.","direction":"학생이 평가 기준을 이해하고 피드백을 반영해 결과물을 다시 다듬도록 수업과 평가를 연결해야 한다."},"practice":{"action":"교과협의회에서 공통 루브릭과 피드백 예시를 마련하고 단원 수업에 적용","review":"학생 수정본과 자기평가 기록을 비교하여 피드백 반영 여부 확인"}}},{"id":2,"topic":"교육격차 해소","title":"모두의 배움과 성장을 보장하는 기초학력 책임교육","studyLinks":["1-2-1","4-1-5"],"sentences":{"essay":{"diagnosis":"같은 성취 수준에서도 읽기, 수 개념, 학습 참여의 어려움이 서로 다를 수 있다.","direction":"초기 진단으로 학습의 어려움을 구체화하고 교실 수업과 보충 지원을 연결해 학습 공백을 줄여야 한다."},"practice":{"action":"학기 초 진단과 교사 관찰을 바탕으로 지원 유형을 정하고 학교 내 담당자와 연계","review":"개별 목표의 도달 여부를 일정 기간 뒤 다시 확인하여 지원 강도 조정"}}},{"id":3,"topic":"독서·인문교육","title":"질문과 사유가 깊어지는 독서·인문교육","studyLinks":["1-2-2","1-3-5"],"sentences":{"essay":{"diagnosis":"독후 활동이 줄거리 확인에 머물면 학생이 자신의 질문을 만들고 근거를 비교할 기회가 줄어든다.","direction":"공통 읽기에서 출발해 학생이 질문을 만들고 자료를 찾아 토론하는 과정을 교육과정에 담아야 한다."},"practice":{"action":"학교도서관과 교과가 함께 주제별 책 목록과 질문 수업을 구성","review":"학생 질문의 변화와 토론 발언의 근거 사용 양상을 수업 사례에서 확인"}}},{"id":4,"topic":"전인적 성장","title":"문화·예술·체육으로 삶을 풍요롭게 하는 전인교육","studyLinks":["1-2-3","4-2-1"],"sentences":{"essay":{"diagnosis":"학교나 지역에 따라 예술·체육 경험의 폭이 달라 학생의 참여 기회에도 차이가 생긴다.","direction":"학교 교육과정과 지역 시설을 연결하여 학생이 관심 있는 활동에 지속적으로 참여할 기회를 넓혀야 한다."},"practice":{"action":"학생 수요를 파악하고 이동과 장비 지원을 포함한 지역 연계 프로그램 편성","review":"학기 말 참여율과 미참여 사유를 함께 분석하여 다음 운영에 반영"}}},{"id":5,"topic":"공동체성 회복","title":"존중과 참여로 함께 성장하는 인성·민주시민교육","studyLinks":["2-1-1","2-1-2"],"sentences":{"essay":{"diagnosis":"학생자치 활동이 행사 위주로 운영되면 학교생활의 실제 결정을 경험하기 어렵다.","direction":"학생이 생활 문제를 찾고 숙의와 실행을 경험하도록 학교의 의사결정 과정에 참여 기회를 마련해야 한다."},"practice":{"action":"학급 회의 제안을 학생회에서 검토하고 학교가 채택 여부와 근거를 회신","review":"학생 제안의 처리 과정과 참여 학생 의견을 학기 말에 확인"}}},{"id":6,"topic":"학생 안전·건강","title":"학생의 마음과 몸을 지키는 안전하고 건강한 학교","studyLinks":["4-2-4","4-2-5"],"sentences":{"essay":{"diagnosis":"학생의 마음건강이나 안전 위험을 일찍 발견해도 담당자와 연결되는 절차가 모호하면 지원이 늦어진다.","direction":"조기 발견부터 전문기관 연계와 사후 확인까지 이어지는 학교 지원 절차를 마련해야 한다."},"practice":{"action":"학교별 초기 대응 담당과 연락 경로를 정하고 사례 기반 모의 대응 실시","review":"사례별 초기 조치 시간과 후속 연계 완료 여부를 점검"}}},{"id":7,"topic":"AI·미래교육","title":"AI와 생태환경교육으로 여는 지속가능한 미래","studyLinks":["3-1-4","2-3-4"],"sentences":{"essay":{"diagnosis":"학생이 AI 결과나 지역 환경 자료의 출처를 확인할 기회가 적으면 탐구의 결론을 검증하기 어렵다.","direction":"지역 환경 문제를 탐구하면서 AI 답변과 관찰 자료를 비교해 출처 확인과 판단 과정을 기르게 해야 한다."},"practice":{"action":"지역 환경 데이터를 활용한 AI 검증 프로젝트 수업과 교원 공동 수업 설계 운영","review":"학생 결과물에서 출처 표시와 AI 답변 검증 근거를 공통 기준으로 확인"}}},{"id":8,"topic":"교육활동보호·지원","title":"교원이 교육활동에 전념할 수 있는 학교 조성","studyLinks":["4-3-1","4-3-3"],"sentences":{"essay":{"diagnosis":"교육활동 침해가 생겼을 때 교원이 초기 대응과 행정 처리를 혼자 떠맡으면 수업 복귀가 늦어진다.","direction":"학교와 교육지원청이 초기 보호, 사안 처리, 회복 지원의 역할을 명확히 나누어야 한다."},"practice":{"action":"학교 담당자와 교육지원청 연락 창구를 지정하고 접수 이후 단계별 업무분장표 공유","review":"초기 지원까지 걸린 시간과 사후 지원 누락 여부를 사례별로 점검"}}}],"groups":[{"id":"1-1","title":"학생 주도성을 키우는 맞춤형 교육과정","directionId":"V1"},{"id":"1-2","title":"배움의 기초를 다지며 삶의 힘을 키우는 참학력","directionId":"V1"},{"id":"1-3","title":"함께 가르치고 배우는 교육공동체","directionId":"V1"},{"id":"2-1","title":"참여와 존중의 문화","directionId":"V2"},{"id":"2-2","title":"마음 돌봄과 회복의 학생성장","directionId":"V2"},{"id":"2-3","title":"평화와 공존의 배움","directionId":"V2"},{"id":"3-1","title":"상상과 도전으로 내일을 여는 창의·융합교육","directionId":"V3"},{"id":"3-2","title":"나다움을 찾고 내일을 준비하는 진로·진학·직업교육","directionId":"V3"},{"id":"3-3","title":"변화와 혁신을 주도하는 미래형 학교","directionId":"V3"},{"id":"4-1","title":"한 명의 아이도 포기하지 않는 교육복지","directionId":"V4"},{"id":"4-2","title":"건강하고 안전한 학교","directionId":"V4"},{"id":"4-3","title":"교육활동 중심의 학교","directionId":"V4"},{"id":"5-1","title":"현장과 함께하는 적극행정","directionId":"V5"},{"id":"5-2","title":"청렴과 원칙의 책임행정","directionId":"V5"},{"id":"5-3","title":"교육여건을 개선하는 지원행정","directionId":"V5"}],"tasks":[{"id":"1-1-1","title":"유아·놀이 중심 교육과정과 방과후 과정","groupId":"1-1"},{"id":"1-1-2","title":"배움과 삶을 잇는 핵심역량 중심 교육과정","groupId":"1-1"},{"id":"1-1-3","title":"꿈과 끼를 키우는 자유학기-진로연계교육","groupId":"1-1"},{"id":"1-1-4","title":"학생의 선택과 성장을 지원하는 고교학점제 내실화","groupId":"1-1"},{"id":"1-1-5","title":"학생 성장을 지원하는 과정중심 평가와 기록","groupId":"1-1"},{"id":"1-2-1","title":"배움의 기초를 세우는 맞춤학력 책임교육","groupId":"1-2"},{"id":"1-2-2","title":"생각을 넓히고 삶을 가꾸는 독서·인문교육","groupId":"1-2"},{"id":"1-2-3","title":"감성을 깨우고 함께 공감하는 학교예술교육","groupId":"1-2"},{"id":"1-3-1","title":"교사의 변화와 성장을 이끄는 수업나눔","groupId":"1-3"},{"id":"1-3-2","title":"교사 주도성 기반의 전문적 학습공동체","groupId":"1-3"},{"id":"1-3-3","title":"교육공동체 참여와 협력으로 성장하는 학교 자치","groupId":"1-3"},{"id":"1-3-4","title":"온 마을이 배움터가 되는 충남마을교육공동체","groupId":"1-3"},{"id":"1-3-5","title":"지역과 함께하는 도서관, 삶이 성장하는 평생교육","groupId":"1-3"},{"id":"2-1-1","title":"참여와 자치로 여는 민주시민교육","groupId":"2-1"},{"id":"2-1-2","title":"참된 마음과 삶을 키워가는 인성교육","groupId":"2-1"},{"id":"2-1-3","title":"성인지 감수성으로 가꾸는 양성평등교육","groupId":"2-1"},{"id":"2-1-4","title":"함께 존중하고 성장하는 인권친화적 학교문화","groupId":"2-1"},{"id":"2-2-1","title":"다시 서는 힘을 키우는 맞춤형 대안교육","groupId":"2-2"},{"id":"2-2-2","title":"학생의 마음을 돌보는 상담활동","groupId":"2-2"},{"id":"2-2-3","title":"함께 성장하는 관계중심 생활교육","groupId":"2-2"},{"id":"2-2-4","title":"공감과 존중의 학교폭력 예방","groupId":"2-2"},{"id":"2-3-1","title":"공존과 상생의 역사·독도교육, 평화·통일교육","groupId":"2-3"},{"id":"2-3-2","title":"함께 살아가는 다문화·세계시민교육","groupId":"2-3"},{"id":"2-3-3","title":"세계와 소통하는 외국어교육","groupId":"2-3"},{"id":"2-3-4","title":"생태시민을 기르는 환경교육","groupId":"2-3"},{"id":"3-1-1","title":"잠재력을 깨우는 영재교육과 상상이룸교육","groupId":"3-1"},{"id":"3-1-2","title":"즐겁게 탐구하고 도전하는 힘을 키우는 과학교육","groupId":"3-1"},{"id":"3-1-3","title":"수학의 가치를 발견하고 이로움을 누리는 수학교육","groupId":"3-1"},{"id":"3-1-4","title":"미래역량을 키우는 AI·정보교육","groupId":"3-1"},{"id":"3-1-5","title":"AI시대를 선도하는 디지털 기반 교육혁신","groupId":"3-1"},{"id":"3-2-1","title":"꿈을 향해 도전하는 진로융합교육","groupId":"3-2"},{"id":"3-2-2","title":"공정성을 강화하는 고등학교 입학전형과 대학수학능력시험","groupId":"3-2"},{"id":"3-2-3","title":"학생 주도성과 미래 경쟁력을 키우는 직업계고","groupId":"3-2"},{"id":"3-2-4","title":"실무와 안전을 책임지는 현장 맞춤형 취업 지원","groupId":"3-2"},{"id":"3-2-5","title":"미래 산업 인재로 거듭나게 하는 직업교육","groupId":"3-2"},{"id":"3-3-1","title":"다양한 이음으로 미래를 설계하는 충남 혁신이음학교","groupId":"3-3"},{"id":"3-3-2","title":"스스로 사고하며 삶의 길을 찾는 미래형 교육과정","groupId":"3-3"},{"id":"3-3-3","title":"격차는 줄이고 행복은 키우는 충남 작은학교","groupId":"3-3"},{"id":"3-3-4","title":"미래교육 변화에 대응하는 학교 공간","groupId":"3-3"},{"id":"4-1-1","title":"유아교육 지원으로 안정적 유보통합 기반 조성","groupId":"4-1"},{"id":"4-1-2","title":"모두를 위한 촘촘한 특수교육 지원","groupId":"4-1"},{"id":"4-1-3","title":"미래 삶을 준비하는 맞춤형 특수교육","groupId":"4-1"},{"id":"4-1-4","title":"보편적 교육복지 확대를 위한 나다움바우처 지원","groupId":"4-1"},{"id":"4-1-5","title":"현장 밀착형 학생맞춤 통합안전망","groupId":"4-1"},{"id":"4-2-1","title":"바른 인성과 건강한 성장을 돕는 학생 체육","groupId":"4-2"},{"id":"4-2-2","title":"미래를 여는 학생 건강 증진체계 구축","groupId":"4-2"},{"id":"4-2-3","title":"미래를 위한 건강하고 지속가능한 교육급식","groupId":"4-2"},{"id":"4-2-4","title":"학생 마음건강 통합 지원과 정신건강 위기대응 역량 강화","groupId":"4-2"},{"id":"4-2-5","title":"현장·체험 중심의 안전교육 및 재난·안전 관리","groupId":"4-2"},{"id":"4-2-6","title":"온동네함께, 온마음다해, 온종일누리는 충남 온돌봄","groupId":"4-2"},{"id":"4-2-7","title":"학생 맞춤 성장을 지원하는 방과후학교","groupId":"4-2"},{"id":"4-3-1","title":"교육활동 보호 체계 강화","groupId":"4-3"},{"id":"4-3-2","title":"교육활동 몰입을 위한 맞춤형 학교지원","groupId":"4-3"},{"id":"4-3-3","title":"업무 구조 개선을 통한 학교업무최적화","groupId":"4-3"},{"id":"5-1-1","title":"교육공동체와 소통하고 공감하는 홍보","groupId":"5-1"},{"id":"5-1-2","title":"도민과 현장 의견수렴을 통한 교육정책 수립","groupId":"5-1"},{"id":"5-1-3","title":"재정 민주주의를 실현하는 학생·학부모·주민참여예산제","groupId":"5-1"},{"id":"5-1-4","title":"상호 이해와 공감에 기반한 상생의 노사문화","groupId":"5-1"},{"id":"5-1-5","title":"교육공무직원 처우와 근무여건 개선","groupId":"5-1"},{"id":"5-1-6","title":"수요자 중심 민원서비스와 안정적 기록 관리","groupId":"5-1"},{"id":"5-2-1","title":"예방과 실천 중심의 청렴한 공직문화","groupId":"5-2"},{"id":"5-2-2","title":"현장 신뢰를 높이는 공정한 인사","groupId":"5-2"},{"id":"5-2-3","title":"건전하고 안전한 학원문화 조성","groupId":"5-2"},{"id":"5-2-4","title":"책임 경영으로 공공성을 높이는 사학","groupId":"5-2"},{"id":"5-2-5","title":"데이터 기반의 지능 정보화 여건 조성","groupId":"5-2"},{"id":"5-2-6","title":"투명하고 신뢰받는 교육재정","groupId":"5-2"},{"id":"5-3-1","title":"단위학교 자율성을 촉진하는 효율적 학교회계","groupId":"5-3"},{"id":"5-3-2","title":"학생 배치와 통학여건 개선","groupId":"5-3"},{"id":"5-3-3","title":"안전하고 건강한 근로환경 조성","groupId":"5-3"},{"id":"5-3-4","title":"쉼과 재충전이 있는 행복한 직장","groupId":"5-3"}]};
+/* 세부과제 펼침자료: 충남교육_정책노트_codex\충남교육_70개_세부과제_펼침자료_codex.json (주요 사업은 제2차(안) 발췌, 문장·조언은 학습용) */
+const TASK_DETAILS={"source":{"title":"2027년 충남교육 주요업무계획 제2차(안)","status":"draft","asOf":"2026-10-19","checkedOn":"2026-11-08","publicationCheck":"[확인 필요] 최신 공개 확정판"},"notes":"주요 사업은 제2차안에서 발췌·축약. 논술 문장과 실무 조언은 학습용 작성. 계획·규모·시행 상태는 최신 공개본 확인 필요.","detailsById":{"1-1-1":{"projects":["유·초 이음교육","유아 수요에 맞춘 방과후 과정·돌봄"],"essay":"유아의 놀이 경험을 초등 입학 전후에 이어 주면 낯선 환경에 적응하면서도 배움의 주도성을 지킬 수 있다.","practice":"유치원과 초등학교 공동 활동, 방과후 수요 조사, 돌봄 안전 점검을 한 일정표에 담는다.","sourceAnchor":"task-1-1-1"},"1-1-2":{"projects":["충남 참학력 교육과정 편성·운영 지침","소규모학교 공동교육과정 운영 도움자료"],"essay":"핵심역량은 학생이 교과에서 배운 것을 생활 문제에 적용하고 그 과정을 설명할 때 드러난다.","practice":"교육과정 재구성표에 성취기준·지역 자원·학생 산출물을 함께 적는다.","sourceAnchor":"task-1-1-2"},"1-1-3":{"projects":["자유학기 편성·운영 지원","농어촌 소규모학교 자유학기 공동교육과정"],"essay":"진로 탐색은 중학교 입학과 학년 전환 때 학생이 자신의 경험을 돌아보고 다음 선택을 준비하도록 이어져야 한다.","practice":"체험 전 질문과 체험 후 성찰 활동을 짝짓고 공동 운영 학교의 이동·인솔을 정한다.","sourceAnchor":"task-1-1-3"},"1-1-4":{"projects":["과목선택 안내","최소 성취수준 보장지도"],"essay":"고교학점제에서 학생의 선택권을 보장하려면 과목 정보와 학업 설계 상담, 선택 이후의 학습 지원이 함께 필요하다.","practice":"과목 신청 전 상담, 미도달 예방지도, 보충지도의 담당자와 시점을 나눈다.","sourceAnchor":"task-1-1-4"},"1-1-5":{"projects":["충청남도평가관리센터","과정중심 평가와 서·논술형 평가 역량 강화"],"essay":"평가 결과가 다음 배움으로 이어지려면 학생이 평가 기준을 이해하고 피드백을 반영해 결과물을 고쳐 볼 기회가 있어야 한다.","practice":"공통 평가기준으로 학생 답안을 함께 채점한 뒤 피드백과 기록 예시를 합의한다.","sourceAnchor":"task-1-1-5"},"1-2-1":{"projects":["기초학력 진단·향상도 검사","협력수업 강사 온채움 선생님"],"essay":"기초학력 책임교육은 진단에서 확인한 어려움에 맞춰 정규수업과 보충 지원을 연결해야 한다.","practice":"진단→지원 분류→협력수업→재점검으로 짜고 학생별 변화를 기록한다.","sourceAnchor":"task-1-2-1"},"1-2-2":{"projects":["온생각·온글 활용","독서토론 이끎학교"],"essay":"독서교육은 학생이 읽은 내용에서 질문을 만들고 다른 해석과 근거를 비교하는 경험으로 깊어진다.","practice":"공통 읽기 자료와 학생 질문, 토론 기록, 수정한 글을 수업 흐름에 넣는다.","sourceAnchor":"task-1-2-2"},"1-2-3":{"projects":["예술드림거점학교","교육과정 내 예술체험 지원"],"essay":"학교와 지역이 예술 자원을 공유하면 학교 규모에 따른 체험 기회의 차이를 줄일 수 있다.","practice":"거점학교별 제공 프로그램과 이동 수단, 학생별 참여 기회를 함께 계획한다.","sourceAnchor":"task-1-2-3"},"1-3-1":{"projects":["수업코칭 전문가","수업실연 이끎교사"],"essay":"수업나눔은 공개 수업에서 관찰한 학생의 배움을 바탕으로 교사가 다음 수업을 수정할 때 전문성 성장으로 이어진다.","practice":"공동설계→수업 관찰→코칭→재실천 일정과 관찰 기준을 정한다.","sourceAnchor":"task-1-3-1"},"1-3-2":{"projects":["학교 교육과정 연계 전문적 학습공동체","학교 밖 교사·교과교육연구 공동체"],"essay":"교사의 자발적 연구가 지속되려면 학교가 공동 연구 시간과 수업에 적용할 여건을 보장해야 한다.","practice":"학년 초 공동 시간부터 확보하고 연구 결과를 적용할 단원과 공유 시점을 정한다.","sourceAnchor":"task-1-3-2"},"1-3-3":{"projects":["학부모회 운영 내실화","학부모회 학교참여 지원 선택 사업"],"essay":"학교 자치는 교육공동체의 제안에 대한 결정 과정과 결과가 참여자에게 돌아갈 때 신뢰를 얻는다.","practice":"학교 참여 제안의 접수·협의·회신 절차를 적고 참여하기 어려운 가정의 의견 통로를 마련한다.","sourceAnchor":"task-1-3-3"},"1-3-4":{"projects":["충남행복교육지구","마을기반 교육과정 실천학교"],"essay":"지역의 사람과 장소를 수업과 연결하면 학생이 생활권의 문제를 탐구하며 마을의 구성원으로 성장할 수 있다.","practice":"교육지원청과 지자체의 역할, 지역 자원 확인, 활동 안전과 교육과정 연계 기준을 정한다.","sourceAnchor":"task-1-3-4"},"1-3-5":{"projects":["권역별 평생교육 특성화 공동사업","학력인정 성인문해교육"],"essay":"지역 도서관이 독서와 평생교육의 거점이 되면 생애 단계와 거주지에 따른 배움의 공백을 줄일 수 있다.","practice":"권역별 대상과 이용 시간대를 조사하고 기관 간 중복 강좌와 사각지대를 비교한다.","sourceAnchor":"task-1-3-5"},"2-1-1":{"projects":["찾아가는 미디어 문해교육","도의회 연계 학생의회 체험"],"essay":"민주시민교육은 학생이 정보의 근거를 검토하고 공동의 문제를 토론해 결정하는 경험을 제공해야 한다.","practice":"생활 의제의 자료 검증→숙의→제안→학교 또는 지역의 회신 흐름을 설계한다.","sourceAnchor":"task-2-1-1"},"2-1-2":{"projects":["세대 공감 우리학교 인성교육","세대 공감 인성교육 이끎학교"],"essay":"인성교육은 학생이 다른 세대의 관점을 듣고 함께 정한 약속을 생활 속에서 실천할 때 구체화된다.","practice":"가정·지역 참여자의 역할을 정하고 실천 전후 학생의 관계 성찰을 비교한다.","sourceAnchor":"task-2-1-2"},"2-1-3":{"projects":["찾아가는 학교 성인권 교육","디지털 성폭력 예방교육"],"essay":"성인지 감수성은 일상과 온라인에서 차별과 침해를 식별하고 도움을 요청하는 힘으로 길러야 한다.","practice":"사례형 예방교육과 신고·지원 경로 안내를 연결하고 학년별 이해를 확인한다.","sourceAnchor":"task-2-1-3"},"2-1-4":{"projects":["충청남도학생인권의회","학교학생인권위원회 운영 지원"],"essay":"인권친화적 학교문화는 학생과 교직원이 규칙을 함께 검토하고 권리 침해에 대응할 절차를 알 때 자리 잡는다.","practice":"학교 인권 의견 수렴 뒤 규칙 개선안, 처리 기한과 결과 공유 방법을 적는다.","sourceAnchor":"task-2-1-4"},"2-2-1":{"projects":["학업중단숙려제","학교 내 대안교실 누리봄교실"],"essay":"학업중단 위험 학생에게는 학교 안에서 관계와 배움을 회복할 수 있는 여러 경로를 열어 주어야 한다.","practice":"발견→상담→숙려·대안교실→복귀 후 확인으로 이어지는 담당자를 지정한다.","sourceAnchor":"task-2-2-1"},"2-2-2":{"projects":["학교 Wee클래스","교육지원청 Wee센터·도교육청 Wee스쿨"],"essay":"학생 상담은 학교의 초기 지원과 전문기관의 심층 지원이 연결될 때 위기와 회복 과정을 함께 돌볼 수 있다.","practice":"위험 수준별 의뢰 기준과 보호자 소통, 연계 뒤 학교 복귀 지원을 구분한다.","sourceAnchor":"task-2-2-2"},"2-2-3":{"projects":["학생생활교육위원회","참여 기반 학생생활규정 운영"],"essay":"관계중심 생활교육은 학생이 규칙을 함께 정하고 갈등이 생겼을 때 관계를 회복할 기회를 갖도록 한다.","practice":"생활규정 개정 의견 수렴과 갈등 이후 회복 대화, 재발 점검을 함께 계획한다.","sourceAnchor":"task-2-2-3"},"2-2-4":{"projects":["학교별 어깨동무활동","학교폭력 예방·갈등조정 다온마음센터 설치안"],"essay":"학교폭력 예방은 교실 관계를 살피는 일상 활동과 갈등이 커지기 전 전문적인 지원을 연결해야 한다.","practice":"보편 예방과 갈등 조정을 나누고, 피해학생 보호와 공식 사안 처리 절차를 먼저 확인한다.","sourceAnchor":"task-2-2-4"},"2-3-1":{"projects":["독도교육·학교통일교육주간","향토사·독립운동사 반영 역사교육문화제"],"essay":"지역의 역사 자료를 여러 관점에서 검토하는 활동은 학생이 평화와 공존의 의미를 구체적으로 생각하도록 돕는다.","practice":"지역 사료의 출처를 확인하고 현장 탐방 전 질문과 탐방 후 근거 토론을 배치한다.","sourceAnchor":"task-2-3-1"},"2-3-2":{"projects":["한국어학급","이주배경학생 꿈길 동행 패키지"],"essay":"이주배경학생의 교육 참여를 보장하려면 한국어 지원을 교과 학습과 또래 관계, 진로 지원으로 이어야 한다.","practice":"초기 언어 수준과 보호자 소통 수요를 파악하고 학교별 담당과 지역 지원기관을 연결한다.","sourceAnchor":"task-2-3-2"},"2-3-3":{"projects":["외국학교 화상연결 영어수업","국제교육 특화학교"],"essay":"외국어교육에서 실제 상대와 과제를 함께 해결하는 경험은 표현의 정확성과 문화 이해를 함께 기른다.","practice":"교류 학교와 공동 과제, 접속이 어려울 때 대체 활동, 대화 수행의 평가 기준을 정한다.","sourceAnchor":"task-2-3-3"},"2-3-4":{"projects":["생태전환 환경교육","충남학생환경회"],"essay":"생태시민교육은 지역의 환경 문제를 관찰하고 학생이 실천의 결과를 확인하는 과정으로 이어져야 한다.","practice":"지역 환경 자료의 기준값을 정하고 학생 제안의 실행 전후 변화를 기록한다.","sourceAnchor":"task-2-3-4"},"3-1-1":{"projects":["소외계층·학교 밖 청소년 영재성 발현 지원","영재교육 질문 프로그램"],"essay":"영재교육의 접근성을 넓히고 일상의 문제를 질문으로 바꾸는 경험을 제공하면 다양한 잠재력을 발견할 수 있다.","practice":"학생 발굴 경로를 다양화하고 질문의 발전과 제작·검증 과정을 기록한다.","sourceAnchor":"task-3-1-1"},"3-1-2":{"projects":["지능형 과학실","지능형 과학탐구 실험수업 연수"],"essay":"과학실의 디지털 도구는 학생이 가설을 검증하고 관찰 결과의 차이를 설명할 때 탐구를 깊게 한다.","practice":"장비 활용 연수에 실험 안전, 측정 오류, 대체 실험 설계까지 포함한다.","sourceAnchor":"task-3-1-2"},"3-1-3":{"projects":["충남 창의수학 지원단","수학 문해력 성장학교"],"essay":"수학 문해력은 생활 속 정보를 수학적으로 표현하고 풀이가 타당한 이유를 설명하는 힘에서 드러난다.","practice":"학교급별 생활 문제를 개발하고 해석·표현·설명 과정에 대한 공통 기준을 마련한다.","sourceAnchor":"task-3-1-3"},"3-1-4":{"projects":["AI정보교육 중점학교","시군별 AI교육 특화 미래배움터 조성안"],"essay":"AI·정보교육은 도구를 쓸 기회를 고르게 보장하면서 학생이 결과의 근거와 한계를 판단할 수 있도록 해야 한다.","practice":"학교와 미래배움터의 역할을 나누고 접근 여건과 학생의 검증 활동을 각각 확인한다.","sourceAnchor":"task-3-1-4"},"3-1-5":{"projects":["마주온 고도화","마주온 톡톡 운영과 고도화"],"essay":"디지털 기반 교육혁신은 교원의 반복 업무를 덜고 확보한 시간을 학생의 배움에 돌리는 변화로 평가할 수 있다.","practice":"반복 업무 한 가지를 시범 적용하고 민감정보 입력 방지, 검토 책임, 처리시간 변화를 확인한다.","sourceAnchor":"task-3-1-5"},"3-2-1":{"projects":["학교로 찾아가는 진로교육","교원 진로교육 연수·성장형 멘토링"],"essay":"진로융합교육은 학생이 교과에서 기른 역량을 실제 과업에 써 보고 자기 선택의 근거를 쌓도록 해야 한다.","practice":"지역 진로 자원을 학교급별 교육과정에 연결하고 체험 후 학생의 계획 수정 여부를 본다.","sourceAnchor":"task-3-2-1"},"3-2-2":{"projects":["고입 기본계획·길라잡이","찾아가는 교육감전형 배움자리"],"essay":"공정한 전형을 위해서는 학생과 보호자가 지역에 상관없이 같은 기준을 이해하고 문의할 수 있어야 한다.","practice":"전형 일정·유의사항을 동일한 문서로 안내하고 질의응답과 안내 오류 정정 절차를 정한다.","sourceAnchor":"task-3-2-2"},"3-2-3":{"projects":["지역전략산업 연계 학과 개편","신산업 실습환경 구축"],"essay":"직업계고 학과 개편은 산업 수요와 함께 학생의 적성, 실습 안전, 졸업 이후 성장 경로를 살펴야 한다.","practice":"기업·학생 수요를 비교하고 학과 개편에 필요한 교원 연수와 장비 운영계획을 붙인다.","sourceAnchor":"task-3-2-3"},"3-2-4":{"projects":["취업담당교원 전문성 향상","저경력교원 취업진로 지도역량 개발"],"essay":"직업계고 취업 지원은 학생의 진로 선택과 현장실습 중 안전, 취업 이후 적응을 이어 주어야 한다.","practice":"실습 기관을 사전 확인하고 사고 신고 경로와 실습 중·종료 후 상담 담당을 지정한다.","sourceAnchor":"task-3-2-4"},"3-2-5":{"projects":["직업계고 해외현장학습·외국어교육","반도체 분야 마이스터고 활성화"],"essay":"미래 산업 인재를 기르려면 직무 역량과 함께 낯선 작업 환경에서 소통하고 안전하게 협력하는 경험이 필요하다.","practice":"현장학습 전 직무·언어·안전 준비와 귀국 후 역량 점검을 같은 계획에 담는다.","sourceAnchor":"task-3-2-5"},"3-3-1":{"projects":["혁신이음학교","성장 부문 공동 교육과정 설계 연구"],"essay":"학교혁신의 경험은 개별 학교의 사례가 다른 학교의 교육과정 설계로 이어질 때 확산된다.","practice":"참여 학교의 공동 목표와 수업 공유 일정을 정하고 적용 과정의 차이도 기록한다.","sourceAnchor":"task-3-3-1"},"3-3-2":{"projects":["혁신미래학교","충남형 IB학교"],"essay":"미래형 교육과정은 학생이 개념을 여러 맥락에 적용하고 탐구의 근거를 말할 수 있도록 수업과 평가를 설계해야 한다.","practice":"탐구 단원을 시범 운영하고 학생 질문·산출물·평가기준을 함께 검토한다.","sourceAnchor":"task-3-3-2"},"3-3-3":{"projects":["농어촌 우리동네 예술학교","작은학교 공동 온돌봄"],"essay":"작은학교 간 공동교육과 돌봄은 학생의 관계와 체험 기회를 넓히면서 지역의 학교를 배움터로 유지하는 데 도움이 된다.","practice":"공동 운영 기관별 장소·차량·인솔을 배정하고 학생 참여와 보호자 만족을 확인한다.","sourceAnchor":"task-3-3-3"},"3-3-4":{"projects":["노후시설 개선","교육시설 화재 위험 요소 개선"],"essay":"학교 공간 개선은 학생과 교직원의 안전을 확보하고 개선 공사 중에도 교육활동이 이어지도록 설계해야 한다.","practice":"위험도에 따라 공사 순서를 정하고 공사 구역 분리, 대체 공간, 완료 후 확인을 적는다.","sourceAnchor":"task-3-3-4"},"4-1-1":{"projects":["마주동행학교 시범 운영","어린이집 5세 이음교육"],"essay":"유보통합 기반 조성은 기관 유형에 따라 달라질 수 있는 유아의 경험을 살피고 초등 전환 지원을 이어 주어야 한다.","practice":"유치원·어린이집·초등학교 공동 활동과 교사 협의, 보호자 안내를 일정에 넣는다.","sourceAnchor":"task-4-1-1"},"4-1-2":{"projects":["장애 위험 조기발견과 교육·복지·의료 연계","장애 영유아 전환 지원"],"essay":"특수교육 지원은 장애 위험의 조기 발견에서 기관 전환까지 끊기지 않아야 교육받을 권리를 보장할 수 있다.","practice":"보호자 동의를 바탕으로 기관별 의뢰·회신 기준과 전환 시 인계 절차를 정한다.","sourceAnchor":"task-4-1-2"},"4-1-3":{"projects":["장애학생 통합형 직업교육 거점학교","취업지원협의체"],"essay":"특수교육대상학생의 진로는 학생의 흥미와 강점을 출발점으로 학교 경험을 성인기 일과 생활에 연결해야 한다.","practice":"개별 진로평가를 토대로 직무 체험과 기관 연계, 졸업 후 추적 지원을 계획한다.","sourceAnchor":"task-4-1-3"},"4-1-4":{"projects":["나다움바우처 도입안","온라인 신청·조회 시스템 구축"],"essay":"기본교육비 지원을 통합할 때는 가정의 신청 부담과 디지털 접근 격차를 함께 줄여야 지원 누락을 예방할 수 있다.","practice":"대상 기준과 신청·이의 절차를 정리하고 온라인 이용이 어려운 가정의 보조 창구를 둔다.","sourceAnchor":"task-4-1-4"},"4-1-5":{"projects":["학생맞춤통합지원위원회·센터 내실화","지역자원 연계 협력망"],"essay":"복합적인 어려움을 겪는 학생은 학교가 단일 창구에서 상황을 살피고 지역 기관과 역할을 나눌 때 필요한 지원을 받기 쉽다.","practice":"사례 발견→회의→기관 연결→재점검의 담당을 정하고 필요한 정보만 공유한다.","sourceAnchor":"task-4-1-5"},"4-2-1":{"projects":["학교 체육주간·체육의 날","초등 생존수영 실기교육"],"essay":"학교체육은 학생이 능력 차이와 무관하게 신체활동에 참여하고 실제 상황에 필요한 안전 역량을 기르도록 해야 한다.","practice":"학생별 활동 수준을 나누고 생존수영의 이동·시설 안전·실기 성취를 확인한다.","sourceAnchor":"task-4-2-1"},"4-2-2":{"projects":["학생건강증진센터 운영안","약물 오남용 예방교육"],"essay":"학생 건강교육은 보편적 예방과 건강취약 학생의 전문 지원이 연결될 때 학교에서 지속될 수 있다.","practice":"건강 위험의 조기 확인, 상담 의뢰, 보건수업 연계와 재점검 시기를 정한다.","sourceAnchor":"task-4-2-2"},"4-2-3":{"projects":["저탄소초록급식이끎학교","식중독 예방 특별점검"],"essay":"교육급식은 학생이 음식과 환경의 관계를 배우도록 하면서 식재료와 조리 과정의 안전을 확보해야 한다.","practice":"영양교육 일정과 위생 점검을 따로 정하고 잔반·학생 의견과 점검 결과를 함께 본다.","sourceAnchor":"task-4-2-3"},"4-2-4":{"projects":["학생정신건강증진거점센터","하트포유 입원학생 학습 지원안"],"essay":"학생 마음건강 지원은 모든 학생의 예방교육에서 고위기 치료와 학습 복귀까지 이어져야 한다.","practice":"예방·긴급 개입·복귀 지원의 담당과 연계 시점을 구분하고 보호자 소통 경로를 둔다.","sourceAnchor":"task-4-2-4"},"4-2-5":{"projects":["학생 주도 재난안전훈련","우리학교 365 시설 안전정보 공개안"],"essay":"안전교육은 학생이 실제 상황에서 대피와 도움 요청을 연습하고 학교가 훈련의 문제를 개선할 때 효과가 있다.","practice":"재난 유형별 대피 동선과 이동 지원이 필요한 학생의 역할을 점검하고 훈련 후 조치한다.","sourceAnchor":"task-4-2-5"},"4-2-6":{"projects":["동네방네 돌봄교실","온동네 돌봄·교육센터"],"essay":"지역 거점과 학교가 돌봄 수요를 함께 파악하면 시간대나 거주지 때문에 생기는 돌봄 공백을 줄일 수 있다.","practice":"방학·저녁 수요와 차량·급식 여건을 조사하고 시설 간 인계와 비상 연락 기준을 정한다.","sourceAnchor":"task-4-2-6"},"4-2-7":{"projects":["학교 특색 방과후학교","과대·과밀 중등 방과후 지원안"],"essay":"방과후학교는 학생 수요와 학교 여건에 맞춘 선택 기회를 제공하고 참여를 가로막는 비용과 시간 조건을 살펴야 한다.","practice":"수요조사 뒤 프로그램·강사·공간을 배정하고 미참여 사유와 대기 인원을 확인한다.","sourceAnchor":"task-4-2-7"},"4-3-1":{"projects":["교육과정 연계 침해 예방교육","학생 주도 교육활동 보호 주간"],"essay":"교원이 수업에 전념할 수 있으려면 교육활동 침해 예방과 사안 발생 직후의 보호·회복 지원이 함께 작동해야 한다.","practice":"예방교육과 사안 대응을 나누고 학교·교육지원청의 접수, 초기 지원, 후속 확인 역할을 명시한다.","sourceAnchor":"task-4-3-1"},"4-3-2":{"projects":["학교지원센터 맞춤형 지원","교육활동지원센터 지원단"],"essay":"학교지원센터는 학교의 반복 요청을 직접 해결하고 여러 기관이 나눠 받던 지원 경로를 쉽게 안내해야 한다.","practice":"학교 요청의 접수→배정→완료 절차를 정하고 처리시간과 반복 요청 유형을 분석한다.","sourceAnchor":"task-4-3-2"},"4-3-3":{"projects":["학교지원디지털시스템 고도화","교직원 행정업무 자동화 프로그램"],"essay":"학교업무최적화는 디지털 도구 도입에 앞서 중복 보고와 불필요한 절차를 찾아 정리하는 데서 시작한다.","practice":"현재 업무 흐름에서 없앨 단계와 자동화할 단계를 나누고 교직원 처리시간을 전후 비교한다.","sourceAnchor":"task-4-3-3"},"5-1-1":{"projects":["행복나눔기자단·영상 일기 리포터","참여형 교육 콘텐츠"],"essay":"교육 홍보는 정책이 학생과 교직원에게 어떤 변화를 주었는지 당사자의 경험으로 전달할 때 신뢰를 얻는다.","practice":"대상별 정보 수요를 구분하고 촬영 동의, 사실 확인, 문의 대응 담당을 정한다.","sourceAnchor":"task-5-1-1"},"5-1-2":{"projects":["단위학교 사업선택제 누리집 개선","학교 자율사업 운영"],"essay":"현장의 의견을 정책에 반영하려면 학교에 사업 선택권을 주고 의견이 채택되거나 보류된 이유를 알려야 한다.","practice":"학교 구성원 협의→사업 선택→지원→결과 환류 흐름에 중복 신청을 줄이는 절차를 넣는다.","sourceAnchor":"task-5-1-2"},"5-1-3":{"projects":["학부모 예산학교","학생·학부모 참여예산 제안사업"],"essay":"참여예산은 학생과 주민이 제안에서 심사 결과 확인까지 경험할 때 재정 민주주의를 배울 기회가 된다.","practice":"제안 접수·심사·선정·집행 결과의 공개 시점과 미선정 사유 안내를 정한다.","sourceAnchor":"task-5-1-3"},"5-1-4":{"projects":["교원노동조합·교원단체와 노사협의","지방공무원 노사합동 협의체"],"essay":"상생의 노사관계는 정례적인 협의에서 각자의 쟁점을 확인하고 합의의 이행을 함께 점검할 때 지속된다.","practice":"교섭과 정책 협의의 의제를 구분하고 합의 사항별 담당·기한·점검 회의를 적는다.","sourceAnchor":"task-5-1-4"},"5-1-5":{"projects":["교육공무직원 노사협의회","인력관리심의위원회"],"essay":"교육공무직의 근무여건 개선은 현장 의견을 바탕으로 인력 배치와 직무 여건을 함께 점검할 때 효과를 낼 수 있다.","practice":"기관별 업무량과 인력 수요를 파악하고 노사협의 뒤 조치와 후속 점검을 기록한다.","sourceAnchor":"task-5-1-5"},"5-1-6":{"projects":["민원 처리 점검·월간 민원","사전정보공표 정비와 전자기록물 이관"],"essay":"민원서비스의 신뢰는 필요한 정보를 제때 제공하고 처리 근거와 기록을 일관되게 관리할 때 높아진다.","practice":"반복 민원은 사전 안내로 돌리고 기록 이관 일정과 개인정보 열람 권한을 구분한다.","sourceAnchor":"task-5-1-6"},"5-2-1":{"projects":["도민감사관·명예감사관","충청권 교차감사"],"essay":"청렴한 공직문화는 현장의 반복 지적을 예방 교육과 업무 절차 개선에 반영할 때 자리 잡는다.","practice":"빈발 지적을 유형화하고 학교 자가점검→현장 안내→재발 여부 확인을 설계한다.","sourceAnchor":"task-5-2-1"},"5-2-2":{"projects":["권역별 교원 인사 의견 수렴","현장 여건을 반영한 교원 정원·전보"],"essay":"교원 인사의 공정성은 학교 여건을 반영하는 기준을 명확히 공개하고 같은 기준을 일관되게 적용할 때 확보된다.","practice":"의견 수렴 뒤 기준·일정·결과 확인 창구를 안내하고 처리 근거를 기록한다.","sourceAnchor":"task-5-2-2"},"5-2-3":{"projects":["학원 정기·특별 지도점검","온라인 광고 모니터링 연계"],"essay":"안전한 학원문화는 이용자가 교습 조건을 정확히 알 수 있도록 안내하고 반복 위반을 확인하는 감독에서 출발한다.","practice":"광고·교습비·통학버스 등 항목별 증빙과 시정 기한을 정하고 재점검 결과를 기록한다.","sourceAnchor":"task-5-2-3"},"5-2-4":{"projects":["사학기관 경영평가","학교·법인회계 예·결산 점검"],"essay":"사학의 공공성은 학교의 자율적 운영과 재정 지원의 투명성을 함께 확보할 때 강화된다.","practice":"학교회계와 법인회계 점검표를 구분하고 개선 조치의 담당과 이행 여부를 확인한다.","sourceAnchor":"task-5-2-4"},"5-2-5":{"projects":["학교 누리집 맞춤형 정보 제공","학내전산망·인터넷 회선 지원"],"essay":"교육 정보화는 학교 규모와 무관하게 안정적으로 접속하고 필요한 정보를 쉽게 찾을 수 있는 기반을 마련해야 한다.","practice":"전산망 장애 유형을 분류하고 복구 책임과 누리집 접근성 점검 항목을 정한다.","sourceAnchor":"task-5-2-5"},"5-2-6":{"projects":["결산 분석 기반 맞춤형 재정관리","회계 안전진단과 계약 동행 지원"],"essay":"신뢰받는 교육재정은 집행 과정의 오류를 예방하고 결산 결과를 다음 예산과 계약 개선에 반영해야 한다.","practice":"집행 점검, 회계 안전진단, 계약 자문을 구분하고 반복 오류의 개선 결과를 남긴다.","sourceAnchor":"task-5-2-6"},"5-3-1":{"projects":["목적사업비 비율 감축안","총액교부사업비 전환 확대안"],"essay":"학교회계의 자율성은 학교가 교육과정의 우선순위에 예산을 배분하고 집행의 효과를 설명할 수 있을 때 살아난다.","practice":"총액교부 전환 대상 사업을 분류하고 학교의 편성 자율성과 이·불용 발생 원인을 함께 점검한다.","sourceAnchor":"task-5-3-1"},"5-3-2":{"projects":["미래형 적정규모학교","워킹스쿨버스 통학 안전 동행단 계획안"],"essay":"학생 배치는 학교 규모의 효율성과 통학 안전, 지역에서 배울 기회를 함께 고려해야 한다.","practice":"학령인구와 통학 동선을 겹쳐 보고 통합·신설 안별 교통, 이동시간, 안전 대책을 비교한다.","sourceAnchor":"task-5-3-2"},"5-3-3":{"projects":["현장 맞춤 산업안전보건교육","전문기관 위험성평가·안전보건점검"],"essay":"안전한 근로환경은 작업자가 위험을 알리고 기관이 개선 조치의 완료를 확인할 때 조성된다.","practice":"직종별 위험요인을 조사해 개선 책임·기한을 적고 현장에서 개선 여부를 다시 확인한다.","sourceAnchor":"task-5-3-3"},"5-3-4":{"projects":["공동숙소 관리 최적화","방학 중 원격근무형 유연근무 시범안"],"essay":"근무 여건 개선은 지역이나 직무에 따라 다른 불편을 줄이면서 교육행정 서비스의 연속성을 확보해야 한다.","practice":"시범 대상과 연락·인수인계 기준을 정하고 업무 공백과 근무자 체감을 함께 확인한다.","sourceAnchor":"task-5-3-4"}}};
+const $=id=>document.getElementById(id);
+let mode=null, presetId=null;
+const M=()=>MODES[mode];
+function curPreset(){const P=M().presets;return P.find(p=>p.id===presetId)||P[0]}
+let total=50*60, plan=[], running=false, startAt=0, banked=0, laps=[], lapFrom=0, lastStage=-1, lastTs=-1, done=false, tipFrom=0, tipShown=-1, warned={}, wake=null, ac=null;
+
+function store(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function fmt(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+function fmt2(s){s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+function elapsed(){return banked+(running?(Date.now()-startAt)/1000:0)}
+
+function build(){
+  const P=curPreset(), stages=P.stages, sum=stages.reduce((a,b)=>a+b.min,0); let acc=0;
+  plan=stages.map((s,i)=>{const len=Math.round(total*s.min/sum);const p={...s,c:"--s"+(i+1),start:acc,len};acc+=len;return p});
+  $("planCaption").textContent=P.label+" 배분";
+  $("ratioHint").textContent=`시간을 바꾸면 ${stages.length}개 구간이 기준 ${sum}분 배분 비율(${stages.map(s=>s.min).join("·")})대로 늘거나 줄어듭니다.`;
+  plan[plan.length-1].len+=total-acc;
+  const bar=$("bar"),ticks=$("ticks");
+  bar.querySelectorAll(".seg").forEach(e=>e.remove());ticks.innerHTML="";
+  plan.forEach((p,i)=>{
+    const d=document.createElement("div");d.className="seg";d.style.flex=p.len;d.style.background=`var(${p.c})`;d.textContent=p.name;d.id="seg"+i;
+    bar.insertBefore(d,$("needle"));
+    const t=document.createElement("span");t.style.left=(p.start/total*100)+"%";t.textContent=Math.round(p.start/60);ticks.appendChild(t);
+  });
+  const e=document.createElement("span");e.style.left="100%";e.style.transform="translateX(-100%)";e.textContent=Math.round(total/60);ticks.appendChild(e);
+  $("checks").innerHTML=P.checks.map((c,i)=>`<li><label for="ck${i}"><input type="checkbox" id="ck${i}">${c}</label></li>`).join("");
+  plan.forEach((p,i)=>{const s=$("seg"+i);s.innerHTML=p.name+"<small>"+fmt(p.len)+"</small>"});
+  renderLog();
+}
+
+function stageAt(t){for(let i=0;i<plan.length;i++)if(t<plan[i].start+plan[i].len)return i;return plan.length-1}
+
+function beep(n,f){
+  if(!$("sound").checked||!ac)return;
+  for(let i=0;i<n;i++){const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.connect(g);g.connect(ac.destination);
+    const t0=ac.currentTime+i*0.28;g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(0.3,t0+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t0+0.22);o.start(t0);o.stop(t0+0.25)}
+}
+
+function tick(){
+  const t=elapsed(), tp=Math.min(t,total), left=total-t, ts=stageAt(tp), i=Math.min(laps.length,plan.length-1), p=plan[i];
+  $("remain").textContent=left>=0?fmt2(left):"+"+fmt2(-left);
+  $("remainLabel").textContent=left>=0?"남은 시간":"기준 시간 초과";
+  $("remain").classList.toggle("warn",left<=300&&t>0);
+  $("elapsed").textContent=`경과 ${fmt2(t)} / 기준 ${fmt2(total)}`;
+  $("needle").style.left=`calc(${tp/total*100}% - 1px)`;
+  $("needle2").style.left=`calc(${tp/total*100}% - 1px)`;
+  plan.forEach((_,k)=>{const s=$("seg"+k);s.classList.toggle("cur",k===ts&&!done);s.classList.toggle("past",k<ts)});
+  renderActual(t);
+  const tl=$("timeline");tl.setAttribute("aria-valuemax",total);tl.setAttribute("aria-valuenow",Math.round(tp));tl.setAttribute("aria-valuetext",`경과 ${fmt(t)}`);
+  $("stName").textContent=done?"기록 완료":`${i+1}/${plan.length} · ${p.name}`;
+  if(i!==lastStage&&lastStage!==-1)animate($("stName"),"silmu-stage-enter");
+  const rest=p.start+p.len-t;
+  $("stLeft").textContent=done?fmt(t):rest>=0?fmt(rest):"+"+fmt(-rest)+" 초과";
+  $("stLeft").classList.toggle("over-time",!done&&rest<0);
+  if(i!==lastStage){tipFrom=Date.now();tipShown=-1}
+  const k=Math.floor((Date.now()-tipFrom)/10000)%p.tips.length;
+  const tipText=done?"기록표의 「기록 복사」를 눌러 Claude에게 붙여 넣으면 시간 배분을 점검받을 수 있습니다.":p.tips[k];
+  if(tipText!==$("stTodo").textContent){const el=$("stTodo");el.textContent=tipText;el.classList.remove("fade");void el.offsetWidth;el.classList.add("fade")}
+  tipShown=k;
+  $("checks").hidden=done||i!==plan.length-1;
+  $("stNext").textContent=done?"":i<plan.length-1?`다음: ${plan[i+1].name} (추천 ${Math.round(plan[i+1].start/60)}분부터)`:"마지막 구간입니다.";
+  if(running){
+    if(lastTs!==-1&&ts!==lastTs)beep(2,880);
+    if(left<=300&&!warned.f5){warned.f5=1;beep(1,660);animate(document.querySelector(".clock"),"silmu-warning-enter")}
+    if(left<=60&&!warned.f1){warned.f1=1;beep(3,660)}
+    if(left<=0&&!warned.f0){warned.f0=1;beep(4,520)}
+  }
+  if(running&&lastStage!==-1&&i!==lastStage){document.body.classList.add("changed");setTimeout(()=>document.body.classList.remove("changed"),4500)}
+  document.body.classList.toggle("running",running);
+  document.body.classList.toggle("ready",!running&&!done&&t===0&&laps.length===0);
+  document.querySelectorAll(".mode-toggle button").forEach(b=>b.disabled=running);
+  document.body.classList.toggle("warning",!done&&left<=300&&t>0);
+  document.body.classList.toggle("finished",!done&&left<=0);
+  $("status").textContent=done?"기록 완료":running&&left<0?"초과 기록 중":running?"집중 중":t>0?"일시정지":"준비";
+  const gap=laps.length<plan.length?laps.length-ts:0;
+  $("notice").textContent=done?`총 ${fmt(t)} · 기준 대비 ${left<0?"+"+fmt(-left)+" 초과":fmt(left)+" 여유"}`:left<=0&&t>0?`기준 시간을 ${fmt(-left)} 넘겼습니다 · ${M().overText}`:left<=300&&t>0?M().warn5:document.body.classList.contains("changed")?p.name+" 구간으로 넘어왔습니다.":running&&gap<0?`추천보다 늦습니다 · 지금은 ${plan[ts].name} 시간입니다.`:running&&gap>0?"추천보다 앞서 있습니다.":"";
+  if(pendingMode)$("notice").textContent=`현재 기록이 지워집니다 · ${MODES[pendingMode].title.split(" ")[0]} 버튼을 한 번 더 누르면 바꿉니다.`;
+  $("lapBtn").disabled=!running||laps.length>=plan.length;
+  lastStage=i; lastTs=ts;
+}
+
+function renderActual(t){
+  const seg=(k,a,d,cur)=>{const l=Math.min(a,total),r=Math.min(a+d,total);if(r<=l)return "";return `<div class="aseg${cur?" cur":""}" style="left:${l/total*100}%;width:${(r-l)/total*100}%;background:var(${plan[k].c})">${plan[k].name}<small>${fmt(d)}</small></div>`};
+  let a=0,h="";
+  laps.forEach((d,k)=>{h+=seg(k,a,d,false);a+=d});
+  if(laps.length<plan.length&&t>a)h+=seg(laps.length,a,t-a,true);
+  if(t>total)h+=`<span class="aover">+${fmt(t-total)}</span>`;
+  $("asegs").innerHTML=h;
+}
+
+function seek(t){
+  t=Math.max(0,Math.min(total,t));
+  banked=t; if(running)startAt=Date.now();
+  let sum=0;const keep=[];for(const d of laps){if(sum+d>t)break;keep.push(d);sum+=d}
+  laps=keep;lapFrom=sum;
+  warned={f5:total-t<=300?1:0,f1:total-t<=60?1:0,f0:total-t<=0?1:0};
+  lastTs=stageAt(t);
+  if(done&&laps.length<plan.length){done=false;$("startBtn").disabled=false;$("startBtn").textContent=t>0?"이어서":"시작"}
+  renderLog();tick();
+}
+function animate(el,cls){if(!el)return;el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls)}
+let dragging=false;
+const tlEl=$("timeline");
+const posToT=e=>{const r=$("bar").getBoundingClientRect();return (e.clientX-r.left)/r.width*total};
+tlEl.addEventListener("pointerdown",e=>{dragging=true;try{tlEl.setPointerCapture(e.pointerId)}catch(_){}seek(posToT(e))});
+tlEl.addEventListener("pointermove",e=>{if(dragging)seek(posToT(e))});
+["pointerup","pointercancel"].forEach(ev=>tlEl.addEventListener(ev,()=>{dragging=false}));
+tlEl.addEventListener("keydown",e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();seek(elapsed()+(e.key==="ArrowRight"?30:-30))}});
+
+async function getWake(){try{wake=await navigator.wakeLock.request("screen")}catch(e){wake=null}}
+function releaseWake(){try{wake&&wake.release()}catch(e){}wake=null}
+
+$("startBtn").onclick=()=>{
+  if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(running){banked=elapsed();running=false;$("startBtn").textContent="이어서";releaseWake()}
+  else{startAt=Date.now();running=true;$("startBtn").textContent="일시정지";$("lapBtn").disabled=laps.length>=plan.length;getWake()}
+  $("total").disabled=true;$("preset").disabled=true;tick();
+};
+$("lapBtn").onclick=()=>{
+  const now=elapsed();laps.push(now-lapFrom);lapFrom=now;
+  if(laps.length>=plan.length){done=true;running=false;banked=now;releaseWake();$("startBtn").textContent="완료";$("startBtn").disabled=true;$("records").open=true;beep(2,520)}
+  renderLog();tick();
+};
+function doReset(){
+  running=false;banked=0;laps=[];lapFrom=0;lastStage=-1;lastTs=-1;done=false;warned={};releaseWake();
+  $("startBtn").textContent="시작";$("startBtn").disabled=false;$("lapBtn").disabled=true;$("total").disabled=false;$("preset").disabled=false;
+}
+$("resetBtn").onclick=()=>{doReset();renderLog();tick()};
+let pendingMode=null,pendingTimer=0;
+function setMode(id,ask){
+  if(!MODES[id])id="essay";
+  if(id===mode&&plan.length)return;
+  if(ask&&(elapsed()>0||laps.length)&&pendingMode!==id){
+    pendingMode=id;tick();
+    clearTimeout(pendingTimer);pendingTimer=setTimeout(()=>{pendingMode=null},5000);return}
+  pendingMode=null;
+  mode=id;store("timerMode",id);
+  const m=M();
+  presetId=load(id+"Preset");if(!m.presets.some(p=>p.id===presetId))presetId=m.presets[0].id;
+  const sv=+load(id+"Total");total=(sv>=10&&sv<=120&&sv%10===0?sv:m.defaultTotal)*60;
+  let h="";for(let v=10;v<=120;v+=10)h+=`<option value="${v}"${v*60===total?" selected":""}>${v}분${m.notes[v]?" ("+m.notes[v]+")":""}</option>`;
+  $("total").innerHTML=h;
+  $("preset").innerHTML=m.presets.map(p=>`<option value="${p.id}"${p.id===presetId?" selected":""}>${p.label}</option>`).join("");
+  $("presetWrap").hidden=m.presets.length<2;
+  $("title").textContent=m.title;$("sub").textContent=m.sub;
+  $("topicLabel").textContent=m.topicLabel;$("topic").placeholder=m.topicPh;$("recordHint").textContent=m.recordHint;
+  document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===id?"true":"false"));
+  doReset();build();tick();renderPriorities();
+  document.querySelectorAll(".timer-sheet,.stage").forEach(el=>animate(el,"silmu-mode-enter"));
+}
+document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>setMode(b.dataset.mode,true));
+$("preset").onchange=e=>{presetId=e.target.value;store(mode+"Preset",presetId);doReset();build();tick()};
+$("fsBtn").onclick=()=>{try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}};
+$("total").onchange=e=>{total=+e.target.value*60;store(mode+"Total",e.target.value);build();tick()};
+$("sound").onchange=e=>store("essaySound",e.target.checked?"1":"0");
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&running)getWake()});
+
+function renderLog(){
+  const rows=plan.map((p,i)=>{
+    const a=laps[i];let diff="",cls="";
+    if(a!=null){const d=a-p.len;diff=(Math.round(d)>0?"+":Math.round(d)<0?"−":"±")+fmt(Math.abs(d));cls=d>30?"over":d<-30?"under":""}
+    return `<tr><td>${p.name}</td><td class="n">${fmt(p.len)}</td><td class="n">${a!=null?fmt(a):"—"}</td><td class="n ${cls}">${diff}</td></tr>`;
+  });
+  const sum=laps.reduce((x,y)=>x+y,0);
+  if(laps.length){const d=sum-plan.slice(0,laps.length).reduce((x,p)=>x+p.len,0);rows.push(`<tr><th>합계(기록분)</th><th class="n">${fmt(plan.slice(0,laps.length).reduce((x,p)=>x+p.len,0))}</th><th class="n">${fmt(sum)}</th><th class="n ${d>30?"over":d<-30?"under":""}">${(Math.round(d)>0?"+":Math.round(d)<0?"−":"±")+fmt(Math.abs(d))}</th></tr>`)}
+  $("log").innerHTML=rows.join("");
+  $("copyText").value=recordText();
+}
+function recordText(){
+  const now=new Date(),pad=n=>String(n).padStart(2,"0");
+  const stamp=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const topic=($("topic")&&$("topic").value.trim())||"(미기재)";
+  const sum=laps.reduce((x,y)=>x+y,0), t=done?sum:elapsed();
+  const L=[M().recordTitle+" "+stamp,M().topicLabel+": "+topic+(mode==="practice"?" · 유형: "+curPreset().label:""),`기준 시간 ${fmt(total)} / 실제 ${fmt(t)} (${t>total?"+"+fmt(t-total)+" 초과":fmt(total-t)+" 여유"})${done?"":mode==="practice"?" · 최종 검토까지 기록 전":" · 결론까지 기록 전"}`,"","구간 | 추천 | 실제 | 차이"];
+  let worst=null;
+  plan.forEach((p,i)=>{const a=laps[i];if(a==null){L.push(`${p.name} | ${fmt(p.len)} | — | —`);return}const d=a-p.len;if(!worst||d>worst.d)worst={n:p.name,d};L.push(`${p.name} | ${fmt(p.len)} | ${fmt(a)} | ${(Math.round(d)>0?"+":Math.round(d)<0?"−":"±")+fmt(Math.abs(d))}`)});
+  if(worst&&worst.d>0)L.push("","가장 많이 밀린 구간: "+worst.n+" (+"+fmt(worst.d)+")");
+  L.push("",`이 기록으로 내 ${mode==="practice"?"실무":"논술"} 시간 배분을 점검해 줘.`);
+  return L.join("\n");
+}
+
+if(load("essaySound")==="0")$("sound").checked=false;
+$("topic").addEventListener("input",()=>{$("copyText").value=recordText()});
+$("copyBtn").onclick=()=>{
+  const txt=recordText();$("copyText").value=txt;
+  const ok=()=>{$("copyBtn").textContent="복사됨";setTimeout(()=>$("copyBtn").textContent="기록 복사",2000)};
+  const fallback=()=>{const ta=$("copyText");ta.focus();ta.select();let r=false;try{r=document.execCommand("copy")}catch(e){}if(r)ok();else $("copyBtn").textContent="아래 글을 직접 복사하세요"};
+  try{navigator.clipboard.writeText(txt).then(ok,fallback)}catch(e){fallback()}
+};
+const THEMES=["auto","light","dark"], THEME_LABELS={auto:"자동",light:"라이트",dark:"다크"};
+let theme=load("essayTheme")||"auto";
+function applyTheme(){if(!THEMES.includes(theme))theme="auto";if(theme==="auto")delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme;$("themeBtn").textContent="테마: "+THEME_LABELS[theme]}
+$("themeBtn").onclick=()=>{theme=THEMES[(THEMES.indexOf(theme)+1)%3];store("essayTheme",theme);applyTheme()};
+/* 정책 노트: 타이머 상태(running, laps 등)를 읽거나 바꾸지 않는다 */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const taskTitle=id=>{const t=POLICY.tasks.find(x=>x.id===id);return t?t.title:""};
+function copyText(txt,btn){
+  const ok=()=>{const o=btn.textContent;btn.textContent="복사됨";setTimeout(()=>btn.textContent=o,1500)};
+  try{navigator.clipboard.writeText(txt).then(ok,()=>{btn.textContent="복사 실패"})}catch(e){btn.textContent="복사 실패"}
+}
+function renderPolicy(){
+  const P=POLICY,S=P.source;
+  const tree=P.directions.map(d=>`<li><details><summary><span class="code">${d.id}</span>${esc(d.title)}</summary><div class="sub-list">${
+    P.groups.filter(g=>g.directionId===d.id).map(g=>`<div class="grp"><span class="code">${g.id}</span>${esc(g.title)}</div><ul>${
+      P.tasks.filter(t=>t.groupId===g.id).map(t=>taskItem(t,s=>esc(s))).join("")}</ul>`).join("")}</div></details></li>`).join("");
+  $("pn").innerHTML=`
+  <div class="pn-hero">
+    <div><p class="pn-vision">${esc(P.vision)}</p><p class="pn-ind">교육지표 · ${esc(P.indicator)}</p>
+    <p class="pn-src">출처: ${esc(S.title)} · ${S.asOf} 기준 · 최신 확정판 [확인 필요] · <a href="https://www.cne.go.kr" target="_blank" rel="noopener">충청남도교육청</a></p></div>
+    <img src="assets/policy-note.png" alt="" loading="lazy" onerror="this.remove()">
+  </div>
+  <div class="pn-search"><input id="pnQ" type="search" placeholder="과제 코드나 키워드 · 예: 2-1-3, 맞춤학력, 교육활동" aria-label="실행과제 찾기"><button type="button" id="pnClear">전체 보기</button></div>
+  <p class="pn-result" id="pnResult" role="status"></p>
+  <div id="pnSearchList" hidden><ul class="sub-list" id="pnHits"></ul></div>
+  <div id="pnBrowse">
+    <h3>5대 정책방향 <span class="code">정책방향 → 중과제 → 세부과제</span></h3><ol>${tree}</ol>
+    <h3>8대 중점과제 <span class="code" id="pnModeLabel"></span></h3><ol class="pn-pri" id="pnPri"></ol>
+    <p class="pn-note">세부과제 이름을 누르면 주요 사업과 문장이 펼쳐집니다. 주요 사업은 제2차(안)에서 발췌·축약했고, 계획·규모·시행 상태는 최신 공개본 확인이 필요합니다. 중점과제와 세부과제의 연결, 추천 문장·조언은 학습용 예시이며 공문 원문 인용이 아닙니다.</p>
+  </div>`;
+  $("pn").addEventListener("click",e=>{const b=e.target.closest("[data-copy]");if(b&&$("pn").contains(b))copyText(b.dataset.copy,b)});
+  $("pnQ").addEventListener("input",searchPolicy);
+  $("pnClear").onclick=()=>{$("pnQ").value="";searchPolicy()};
+  renderPriorities();
+}
+function renderPriorities(){
+  if(!$("pnPri"))return;
+  const pr=mode==="practice";
+  $("pnModeLabel").textContent=pr?"실무 문장: 추진 · 성과 확인":"논술 문장: 진단 · 정책 연결";
+  $("pnPri").innerHTML=POLICY.priorities.map(p=>{
+    const s=pr?p.sentences.practice:p.sentences.essay;
+    const pairs=pr?[["추진",s.action],["성과 확인",s.review]]:[["진단",s.diagnosis],["정책 연결",s.direction]];
+    return `<li><details><summary><b>${p.id}</b>${esc(p.title)}<span class="topic">${esc(p.topic)}</span></summary><div class="pn-sent">${
+      pairs.map(([k,v])=>`<div class="row"><p><em>${k}</em>${esc(v)}</p><button type="button" data-copy="${esc(v)}">복사</button></div>`).join("")
+    }<span class="pn-links">학습용 연결: ${p.studyLinks.map(id=>`<span class="code">${id}</span>${esc(taskTitle(id))}`).join(" · ")}</span></div></details></li>`}).join("");
+}
+/* 세부과제 한 줄: 이름을 누르면 주요 사업 · 논술 1문장 · 실무 조언을 펼친다 */
+function taskItem(t,fmtTitle,suffix){
+  const d=TASK_DETAILS.detailsById[t.id];
+  if(!d)return `<li><span class="code">${fmtTitle(t.id)}</span>${fmtTitle(t.title)}${suffix||""}</li>`;
+  return `<li><details class="task"><summary><span class="code">${fmtTitle(t.id)}</span>${fmtTitle(t.title)}${suffix||""}</summary><div class="pn-sent tdet">
+    <p><em>주요 사업</em>${d.projects.map(esc).join(" · ")}</p>
+    <div class="row"><p><em>논술 1문장</em>${esc(d.essay)}</p><button type="button" data-copy="${esc(d.essay)}">복사</button></div>
+    <div class="row"><p><em>실무 조언</em>${esc(d.practice)}</p><button type="button" data-copy="${esc(d.practice)}">복사</button></div>
+  </div></details></li>`;
+}
+function searchPolicy(){
+  const q=$("pnQ").value.trim();
+  $("pnBrowse").hidden=!!q;$("pnSearchList").hidden=!q;
+  if(!q){$("pnResult").textContent="";return}
+  const words=q.toLowerCase().split(/\s+/);
+  const hit=t=>{const d=TASK_DETAILS.detailsById[t.id];const hay=(t.id+" "+t.title+" "+(t.topic||"")+" "+(d?d.projects.join(" "):"")).toLowerCase();return words.every(w=>hay.includes(w))};
+  const items=[...POLICY.priorities.map(p=>({id:"중점 "+p.id,title:p.title+" ("+p.topic+")",kind:"8대 중점과제",topic:p.topic})),...POLICY.groups.map(g=>({...g,kind:"중과제"})),...POLICY.tasks.map(t=>({...t,kind:"세부과제"}))].filter(hit);
+  const mark=s=>{let h=esc(s);words.forEach(w=>{if(w)h=h.split(esc(w)).join(`<mark>${esc(w)}</mark>`)});return h};
+  $("pnHits").innerHTML=items.map(t=>{const d=POLICY.directions.find(x=>x.id===(t.directionId||(POLICY.groups.find(g=>g.id===t.groupId)||{}).directionId));
+    const tag=` <span class="code">${t.kind}${d?" · "+d.id+" "+esc(d.title):""}</span>`;
+    return t.kind==="세부과제"?taskItem(t,mark,tag):`<li><span class="code">${mark(t.id)}</span>${mark(t.title)}${tag}</li>`}).join("");
+  $("pnResult").textContent=items.length?`${items.length}건 찾음`:"찾은 과제가 없습니다 · 「전체 보기」로 목록에 돌아갈 수 있습니다.";
+}
+renderPolicy();
+applyTheme();setMode(load("timerMode")||"essay",false);setInterval(tick,250);
+</script>
+
+</body>
+</html>
