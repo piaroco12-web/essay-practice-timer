@@ -99,6 +99,12 @@ td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-
 @media(max-width:600px){.pn-hero{grid-template-columns:1fr}.pn-hero img{order:2}}
 @media(max-width:600px){.mode-pick{gap:8px;padding-top:18px}.mode-card{padding:12px;gap:2px 10px}.mode-card svg{width:26px;height:26px}.mode-card b{font-size:15px}.mode-card span{font-size:11px}.mode-toggle button{padding:6px 9px}}
 @media(max-width:600px){.wrap{padding-block:16px 28px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}header{gap:12px;padding-bottom:15px}h1{font-size:15px}.header-tools{gap:10px}.header-tools .sub{display:none}.status{font-size:11px}.timer-sheet{padding-top:25px}.big{font-size:clamp(76px,23vw,138px)}.stage{margin-top:20px;margin-bottom:22px}.stage h2{font-size:34px}.stage p{font-size:13px}.bar{height:55px;gap:2px}.seg{font-size:11px}.seg small{font-size:9px}.controls{gap:8px;padding-bottom:20px}.controls button{padding:10px 12px;flex:1;white-space:nowrap}.controls .primary{min-width:90px}#fsBtn{flex-basis:100%;padding:3px;min-height:36px}.settings{gap:16px}.records summary span{font-size:11px}.timeline-caption{font-size:10px}.stage .left{font-size:12px}.elapsed{font-size:11px}}
+
+.pn-plan{margin-top:8px;border-top:1px solid var(--rule)}
+.pn-plan article{max-width:70ch;padding:0 10px 12px}
+.pn-plan h4{margin:4px 0 8px;font-size:1rem}
+.pn-plan article p,.pn-plan article li{margin:0 0 8px;line-height:1.65}
+.pn-plan article ol{padding-left:1.5em;margin:8px 0}
 </style>
 </head>
 <body class="ready">
@@ -481,6 +487,24 @@ function renderPriorities(){
       pairs.map(([k,v])=>`<div class="row"><p><em>${k}</em>${esc(v)}</p><button type="button" data-copy="${esc(v)}">복사</button></div>`).join("")
     }<span class="pn-links">학습용 연결: ${p.studyLinks.map(id=>`<span class="code">${id}</span>${esc(taskTitle(id))}`).join(" · ")}</span></div></details></li>`}).join("");
 }
+const AI_PLAN_SUMMARY = `<details class="pn-plan">
+      <summary>세부 내용 보기</summary>
+      <article>
+        <h4>2027 충남형 AI·정보교육 추진계획 한눈에 보기</h4>
+        <p class="pn-note">2026년 11월 최종수정협의안 요약 · 3-1-4 AI·정보교육과 3-1-5 디지털 기반 교육혁신 연계</p>
+        <p><strong>목표</strong> 학생이 AI와 컴퓨팅으로 문제를 발견하고 해결하도록 돕는다. 교육데이터를 안전하게 관리하고, 지역과 학생 여건에 따른 디지털 접근 격차를 줄인다.</p>
+        <p><strong>핵심 가치</strong> 주도성 · 주권성 · 포용성</p>
+        <ol>
+          <li><strong>교육과정·학교 혁신</strong> 충남형 인공지능학교 운영, 정보교육지원단과 도움자료 보급, 디지털 기초소양 진단과 학생 동아리 지원.</li>
+          <li><strong>소버린 AI·플랫폼 혁신</strong> ‘우리 아이 AI 선생님’의 질문형 코칭과 손글씨 서·논술형 피드백, 마주온 톡톡 고도화와 교직원 AI 시범 지원, 에듀테크 실증과 학습지원 소프트웨어 심의 지원.</li>
+          <li><strong>인프라·시민성·교원 혁신</strong> 테크센터와 디지털 튜터의 수업 지원, AI 윤리·리터러시 교육과 과의존 예방·치유, 수준별 교원 연수.</li>
+          <li><strong>글로컬 생태계 혁신</strong> 시군 AI교육 특화 미래배움터, 디지털 포용 캠프와 AI·SW교육 주간, 국제 교육정보화 협력.</li>
+        </ol>
+        <p><strong>학교와 교육지원청의 역할</strong> 학교는 교과·창의적 체험활동에 AI 탐구와 윤리 교육을 편성한다. 교육지원청은 미래배움터 프로그램, 이동·인솔 여건, 학교 대상 연수와 기기 지원을 연결한다.</p>
+        <p><strong>답안 적용</strong> 체험 횟수와 함께 학교별 접근 여건, 학생이 AI 답변의 출처를 검증한 결과, 학교 업무 부담의 변화를 확인한다. 이 항목은 학습용 제안이다.</p>
+        <p class="pn-note">출처 · 「2027년 충남형 인공지능(AI)·정보교육 추진 계획(안)」 최종수정협의안. 전략은 과제표의 네 묶음으로 정리했다. 체계도 전략 수와 일부 사업 규모·시행 여부는 확정본 확인 필요.</p>
+      </article>
+    </details>`;
 /* 세부과제 한 줄: 이름을 누르면 주요 사업 · 논술 1문장 · 실무 조언을 펼친다 */
 function taskItem(t,fmtTitle,suffix){
   const d=TASK_DETAILS.detailsById[t.id];
@@ -489,6 +513,7 @@ function taskItem(t,fmtTitle,suffix){
     <p><em>주요 사업</em>${d.projects.map(esc).join(" · ")}</p>
     <div class="row"><p><em>논술 1문장</em>${esc(d.essay)}</p><button type="button" data-copy="${esc(d.essay)}">복사</button></div>
     <div class="row"><p><em>실무 조언</em>${esc(d.practice)}</p><button type="button" data-copy="${esc(d.practice)}">복사</button></div>
+    ${t.id==="3-1-4"?AI_PLAN_SUMMARY:""}
   </div></details></li>`;
 }
 function searchPolicy(){
