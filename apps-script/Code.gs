@@ -77,7 +77,7 @@ function validRecord_(r) {
     new Date(r.date).toISOString().slice(0, 10) === r.date &&
     ['essay', 'practice'].includes(r.mode) && seconds(r.total, 7200) && r.total >= 600 &&
     seconds(r.elapsed, 86400) && r.elapsed > 0 && Array.isArray(r.stages) &&
-    r.stages.length === 6 && r.stages.every(s => s && text(s.name, 60) &&
+    r.stages.length >= 6 && r.stages.length <= 8 && r.stages.every(s => s && text(s.name, 60) &&
       seconds(s.planned, 7200) && (s.actual === null || seconds(s.actual, 86400)));
 }
 
